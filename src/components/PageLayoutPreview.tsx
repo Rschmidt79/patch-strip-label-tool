@@ -6,22 +6,21 @@ import {
 import { StripArtwork } from './StripArtwork'
 import supportQrImageUrl from '../assets/bmc_qr.png'
 import {
-  getSupportQrDecorationGeometryMm,
-  SUPPORT_QR_DISPLAY_URL,
+  getSafeSupportQrDecorationGeometryMm,
+  SUPPORT_QR_LABEL_LINE_1,
+  SUPPORT_QR_LABEL_LINE_2,
 } from '../lib/support-qr'
 
 interface PageLayoutPreviewProps {
   project: LabelProject
   plan: PdfLayoutPlan | undefined
   error: string | undefined
-  includeSupportQr: boolean
 }
 
 export function PageLayoutPreview({
   project,
   plan,
   error,
-  includeSupportQr,
 }: PageLayoutPreviewProps) {
   const stripsById = new Map(project.strips.map((strip) => [strip.id, strip]))
 
@@ -58,12 +57,12 @@ export function PageLayoutPreview({
               plan.pageHeightMm -
               plan.usableArea.yMm -
               plan.usableArea.heightMm
-            const supportQrGeometry = includeSupportQr
-              ? getSupportQrDecorationGeometryMm(
-                  plan.pageWidthMm,
-                  plan.pageHeightMm,
-                )
-              : undefined
+            const supportQrGeometry =
+              getSafeSupportQrDecorationGeometryMm(
+                plan.pageWidthMm,
+                plan.pageHeightMm,
+                pagePlacements,
+              )
 
             return (
               <figure className="page-preview-card" key={pageIndex}>
@@ -112,7 +111,7 @@ export function PageLayoutPreview({
                         }
                         textAnchor="end"
                       >
-                        Like the tool?
+                        {SUPPORT_QR_LABEL_LINE_1}
                       </text>
                       <text
                         x={supportQrGeometry.textRightXmm}
@@ -124,7 +123,7 @@ export function PageLayoutPreview({
                         }
                         textAnchor="end"
                       >
-                        {SUPPORT_QR_DISPLAY_URL}
+                        {SUPPORT_QR_LABEL_LINE_2}
                       </text>
                       <rect
                         x={supportQrGeometry.xMm}

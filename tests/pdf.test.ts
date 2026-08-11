@@ -4,6 +4,8 @@ import {
   PDFDocument,
   PDFRawStream,
 } from 'pdf-lib'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getPageDimensionsMm } from '../src/config/pages'
 import { millimetersToPoints } from '../src/lib/dimensions'
@@ -24,14 +26,18 @@ import {
 } from '../src/lib/pdf-export'
 import {
   getSupportQrDecorationGeometryMm,
+  getSupportQrDecorationPolygonMm,
+  getSafeSupportQrDecorationGeometryMm,
   SUPPORT_QR_CLEARANCE_MM,
-  SUPPORT_QR_DISPLAY_URL,
+  SUPPORT_QR_LABEL_LINE_1,
+  SUPPORT_QR_LABEL_LINE_2,
 } from '../src/lib/support-qr'
 import {
   getPlacementPolygonMm,
   PDF_STRIP_GAP_MM,
   PdfPlacementError,
   planPdfLayout,
+  type PdfStripPlacement,
 } from '../src/lib/pdf-layout'
 import { createProject, createStrip } from '../src/model/defaults'
 import { addGroupHeader } from '../src/lib/group-headers'
@@ -318,7 +324,7 @@ describe('PDF layout and generation', () => {
     )
   })
 
-  it('places the optional support QR outside label geometry without changing layout', async () => {
+  it('automatically places the support QR bottom-right without changing layout', async () => {
     const project = createProject()
     project.page = { size: 'A3', orientation: 'landscape' }
     project.strips = [
@@ -326,34 +332,35 @@ describe('PDF layout and generation', () => {
       createStrip('Long strip 2', 432, 7.5, 12),
     ]
     const before = planPdfLayout(project)
-    const geometry = getSupportQrDecorationGeometryMm(
+    const geometry = getSafeSupportQrDecorationGeometryMm(
       before.pageWidthMm,
       before.pageHeightMm,
+      before.placements,
     )
     expect(geometry).toBeDefined()
     if (!geometry) throw new Error('Expected A3 support decoration geometry.')
 
-    const usableTopMm = before.usableArea.yMm + before.usableArea.heightMm
-    expect(geometry.yMm).toBeGreaterThanOrEqual(
-      usableTopMm + SUPPORT_QR_CLEARANCE_MM,
+    expect(geometry.yMm).toBe(5)
+    expect(geometry.xMm + geometry.widthMm).toBe(
+      before.pageWidthMm - 5,
     )
+    const decorationPolygon = getSupportQrDecorationPolygonMm(geometry)
     for (const placement of before.placements) {
       expect(
-        rectanglesOverlapMm(geometry, {
-          xMm: placement.xMm,
-          yMm: placement.yMm,
-          widthMm: placement.boundingWidthMm,
-          heightMm: placement.boundingHeightMm,
-        }),
-      ).toBe(false)
+        getMinimumPolygonDistanceMm(
+          decorationPolygon,
+          getPlacementPolygonMm(placement),
+        ),
+      ).toBeGreaterThanOrEqual(SUPPORT_QR_CLEARANCE_MM - 1e-8)
     }
 
-    const bytes = await createLabelsPdf(project, { includeSupportQr: true })
+    const bytes = await createLabelsPdf(project)
     const after = planPdfLayout(project)
     expect(after).toEqual(before)
     const pdf = await PDFDocument.load(bytes)
     const content = getDecodedPageContent(pdf, 0)
-    expect(content).toContain(asciiHex(SUPPORT_QR_DISPLAY_URL))
+    expect(content).toContain(asciiHex(SUPPORT_QR_LABEL_LINE_1))
+    expect(content).toContain(asciiHex(SUPPORT_QR_LABEL_LINE_2))
     expect(content).toMatch(/\/Image-[^\s]+ Do/)
     expect(after.pageCount).toBe(1)
     expect(after.placements.every((placement) => placement.widthMm === 432)).toBe(
@@ -364,15 +371,49 @@ describe('PDF layout and generation', () => {
     )
   })
 
-  it('omits support decoration when disabled and from calibration PDFs', async () => {
-    const project = createProject()
-    const labelsBytes = await createLabelsPdf(project, {
-      includeSupportQr: false,
-    })
-    const labelsPdf = await PDFDocument.load(labelsBytes)
-    const labelContent = getDecodedPageContent(labelsPdf, 0)
-    expect(labelContent).not.toContain(asciiHex(SUPPORT_QR_DISPLAY_URL))
-    expect(labelContent).not.toMatch(/\/Image-[^\s]+ Do/)
+  it('omits support decoration when bottom-right label geometry is occupied', () => {
+    const geometry = getSupportQrDecorationGeometryMm(297, 210)
+    expect(geometry).toBeDefined()
+    if (!geometry) throw new Error('Expected A4 support decoration geometry.')
+    const occupyingPlacement: PdfStripPlacement = {
+      stripId: 'occupying-strip',
+      pageIndex: 0,
+      xMm: geometry.boundsXmm,
+      yMm: geometry.boundsYmm,
+      widthMm: geometry.boundsWidthMm,
+      heightMm: geometry.boundsHeightMm,
+      rotationDegrees: 0,
+      boundingWidthMm: geometry.boundsWidthMm,
+      boundingHeightMm: geometry.boundsHeightMm,
+    }
+
+    expect(
+      getSafeSupportQrDecorationGeometryMm(297, 210, [
+        occupyingPlacement,
+      ]),
+    ).toBeUndefined()
+  })
+
+  it('uses the automatic QR generator for Export and Print with no UI control', () => {
+    const appSource = readFileSync(
+      join(process.cwd(), 'src/App.tsx'),
+      'utf8',
+    )
+    const userInterfaceSource = [
+      'src/App.tsx',
+      'src/components/Sidebar.tsx',
+      'src/components/Workspace.tsx',
+      'src/components/PageLayoutPreview.tsx',
+    ]
+      .map((path) => readFileSync(join(process.cwd(), path), 'utf8'))
+      .join('\n')
+
+    expect(appSource.match(/createLabelsPdf\(project\)/g)).toHaveLength(2)
+    expect(userInterfaceSource).not.toContain('Include support QR')
+    expect(userInterfaceSource).not.toContain('includeSupportQr')
+  })
+
+  it('keeps support QR content out of calibration PDFs', async () => {
 
     const calibrationBytes = await createCalibrationPdf({
       size: 'A4',
@@ -380,7 +421,12 @@ describe('PDF layout and generation', () => {
     })
     const calibrationPdf = await PDFDocument.load(calibrationBytes)
     const calibrationContent = getDecodedPageContent(calibrationPdf, 0)
-    expect(calibrationContent).not.toContain(asciiHex(SUPPORT_QR_DISPLAY_URL))
+    expect(calibrationContent).not.toContain(
+      asciiHex(SUPPORT_QR_LABEL_LINE_1),
+    )
+    expect(calibrationContent).not.toContain(
+      asciiHex(SUPPORT_QR_LABEL_LINE_2),
+    )
     expect(calibrationContent).not.toMatch(/\/Image-[^\s]+ Do/)
   })
 

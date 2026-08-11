@@ -148,7 +148,7 @@ describe('untrusted project content', () => {
       '<script>alert(1)</script>',
     )
 
-    const bytes = await createLabelsPdf(project, { includeSupportQr: false })
+    const bytes = await createLabelsPdf(project)
     const pdf = await PDFDocument.load(bytes)
     const content = getDecodedPageContent(pdf)
     expect(content).toContain(asciiHex(attack))

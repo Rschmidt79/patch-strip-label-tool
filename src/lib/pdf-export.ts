@@ -28,8 +28,9 @@ import {
   type PdfStripPlacement,
 } from './pdf-layout'
 import {
-  getSupportQrDecorationGeometryMm,
-  SUPPORT_QR_DISPLAY_URL,
+  getSafeSupportQrDecorationGeometryMm,
+  SUPPORT_QR_LABEL_LINE_1,
+  SUPPORT_QR_LABEL_LINE_2,
   type SupportQrDecorationGeometryMm,
 } from './support-qr'
 import {
@@ -70,10 +71,6 @@ export interface PdfStripTransform {
   d: number
   translateXPt: number
   translateYPt: number
-}
-
-export interface LabelsPdfOptions {
-  includeSupportQr?: boolean
 }
 
 function decodePngDataUrl(dataUrl: string): Uint8Array {
@@ -177,12 +174,13 @@ function drawSupportQrDecoration(
     height: millimetersToPoints(geometry.imageSizeMm),
   })
 
-  const title = 'Like the tool?'
+  const title = SUPPORT_QR_LABEL_LINE_1
+  const supportText = SUPPORT_QR_LABEL_LINE_2
   const titleSizePt = 5.5
   const urlSizePt = 5
   const titleWidthPt = boldFont.widthOfTextAtSize(title, titleSizePt)
-  const urlWidthPt = regularFont.widthOfTextAtSize(
-    SUPPORT_QR_DISPLAY_URL,
+  const supportTextWidthPt = regularFont.widthOfTextAtSize(
+    supportText,
     urlSizePt,
   )
   const textRightPt = millimetersToPoints(geometry.textRightXmm)
@@ -197,8 +195,8 @@ function drawSupportQrDecoration(
     font: boldFont,
     color: grayscale(0.35),
   })
-  page.drawText(SUPPORT_QR_DISPLAY_URL, {
-    x: textRightPt - urlWidthPt,
+  page.drawText(supportText, {
+    x: textRightPt - supportTextWidthPt,
     y: centerYPt - millimetersToPoints(1.8),
     size: urlSizePt,
     font: regularFont,
@@ -457,10 +455,8 @@ function drawStrip(
 
 export async function createLabelsPdf(
   project: LabelProject,
-  options: LabelsPdfOptions = {},
 ): Promise<Uint8Array> {
   const plan = planPdfLayout(project)
-  const includeSupportQr = options.includeSupportQr ?? true
   const pdf = await PDFDocument.create()
   pdf.setTitle(project.name || 'Patch Strip Labels')
   pdf.setSubject('Dimensionally accurate patch strip labels')
@@ -469,21 +465,27 @@ export async function createLabelsPdf(
 
   const regularFont = await pdf.embedFont(StandardFonts.Helvetica)
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const supportQrImage = includeSupportQr
+  const supportGeometries = Array.from(
+    { length: plan.pageCount },
+    (_, pageIndex) =>
+      getSafeSupportQrDecorationGeometryMm(
+        plan.pageWidthMm,
+        plan.pageHeightMm,
+        plan.placements.filter(
+          (placement) => placement.pageIndex === pageIndex,
+        ),
+      ),
+  )
+  const supportQrImage = supportGeometries.some(Boolean)
     ? await pdf.embedPng(decodePngDataUrl(supportQrDataUrl))
     : undefined
-  const pages = Array.from({ length: plan.pageCount }, () => {
+  const pages = Array.from({ length: plan.pageCount }, (_, pageIndex) => {
     const page = pdf.addPage([
       millimetersToPoints(plan.pageWidthMm),
       millimetersToPoints(plan.pageHeightMm),
     ])
     drawPrintNotice(page, plan.pageHeightMm, boldFont)
-    const supportGeometry = supportQrImage
-      ? getSupportQrDecorationGeometryMm(
-          plan.pageWidthMm,
-          plan.pageHeightMm,
-        )
-      : undefined
+    const supportGeometry = supportGeometries[pageIndex]
     if (supportGeometry && supportQrImage) {
       drawSupportQrDecoration(
         page,

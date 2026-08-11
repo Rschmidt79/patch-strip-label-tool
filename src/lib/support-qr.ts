@@ -1,7 +1,15 @@
-import { SUPPORT_URL } from '../config/app-info'
-import { PDF_MARGIN_MM, PDF_NOTICE_RESERVE_MM } from './pdf-layout'
+import {
+  getPlacementPolygonMm,
+  type PdfStripPlacement,
+} from './pdf-layout'
+import {
+  getRotatedRectangleCornersMm,
+  polygonsMaintainGapMm,
+  type PointMm,
+} from './geometry'
 
-export const SUPPORT_QR_DISPLAY_URL = SUPPORT_URL.replace(/^https?:\/\//, '')
+export const SUPPORT_QR_LABEL_LINE_1 = 'Like the tool?'
+export const SUPPORT_QR_LABEL_LINE_2 = 'Buy me a coffee'
 export const SUPPORT_QR_BOX_SIZE_MM = 13
 export const SUPPORT_QR_IMAGE_INSET_MM = 1
 export const SUPPORT_QR_CLEARANCE_MM = 2
@@ -20,12 +28,15 @@ export interface SupportQrDecorationGeometryMm {
   imageSizeMm: number
   textRightXmm: number
   textWidthMm: number
+  boundsXmm: number
+  boundsYmm: number
+  boundsWidthMm: number
+  boundsHeightMm: number
 }
 
 /**
- * Returns a decoration box wholly above the label-usable page area. The
- * placement planner never consumes this geometry, so labels cannot move or
- * scale when the decoration is enabled.
+ * Returns the fixed bottom-right page-decoration candidate. This geometry is
+ * evaluated only after strip packing, so it can never move or scale labels.
  */
 export function getSupportQrDecorationGeometryMm(
   pageWidthMm: number,
@@ -33,17 +44,15 @@ export function getSupportQrDecorationGeometryMm(
 ): SupportQrDecorationGeometryMm | undefined {
   const xMm =
     pageWidthMm - SUPPORT_QR_EDGE_MARGIN_MM - SUPPORT_QR_BOX_SIZE_MM
-  const yMm =
-    pageHeightMm - SUPPORT_QR_EDGE_MARGIN_MM - SUPPORT_QR_BOX_SIZE_MM
-  const usableTopMm =
-    pageHeightMm - PDF_MARGIN_MM - PDF_NOTICE_RESERVE_MM
+  const yMm = SUPPORT_QR_EDGE_MARGIN_MM
   const textLeftMm =
     xMm - SUPPORT_QR_TEXT_GAP_MM - SUPPORT_QR_TEXT_WIDTH_MM
 
   if (
-    xMm < PDF_MARGIN_MM ||
-    textLeftMm < PDF_MARGIN_MM ||
-    yMm < usableTopMm + SUPPORT_QR_CLEARANCE_MM
+    xMm < SUPPORT_QR_EDGE_MARGIN_MM ||
+    textLeftMm < SUPPORT_QR_EDGE_MARGIN_MM ||
+    yMm + SUPPORT_QR_BOX_SIZE_MM >
+      pageHeightMm - SUPPORT_QR_EDGE_MARGIN_MM
   ) {
     return undefined
   }
@@ -59,5 +68,49 @@ export function getSupportQrDecorationGeometryMm(
       SUPPORT_QR_BOX_SIZE_MM - SUPPORT_QR_IMAGE_INSET_MM * 2,
     textRightXmm: xMm - SUPPORT_QR_TEXT_GAP_MM,
     textWidthMm: SUPPORT_QR_TEXT_WIDTH_MM,
+    boundsXmm: textLeftMm,
+    boundsYmm: yMm,
+    boundsWidthMm:
+      xMm + SUPPORT_QR_BOX_SIZE_MM - textLeftMm,
+    boundsHeightMm: SUPPORT_QR_BOX_SIZE_MM,
   }
+}
+
+export function getSupportQrDecorationPolygonMm(
+  geometry: SupportQrDecorationGeometryMm,
+): PointMm[] {
+  return getRotatedRectangleCornersMm(
+    geometry.boundsWidthMm,
+    geometry.boundsHeightMm,
+    0,
+    { xMm: geometry.boundsXmm, yMm: geometry.boundsYmm },
+  )
+}
+
+export function isSupportQrDecorationSafe(
+  geometry: SupportQrDecorationGeometryMm,
+  placements: readonly PdfStripPlacement[],
+): boolean {
+  const decorationPolygon = getSupportQrDecorationPolygonMm(geometry)
+  return placements.every((placement) =>
+    polygonsMaintainGapMm(
+      decorationPolygon,
+      getPlacementPolygonMm(placement),
+      SUPPORT_QR_CLEARANCE_MM,
+    ),
+  )
+}
+
+export function getSafeSupportQrDecorationGeometryMm(
+  pageWidthMm: number,
+  pageHeightMm: number,
+  placements: readonly PdfStripPlacement[],
+): SupportQrDecorationGeometryMm | undefined {
+  const geometry = getSupportQrDecorationGeometryMm(
+    pageWidthMm,
+    pageHeightMm,
+  )
+  return geometry && isSupportQrDecorationSafe(geometry, placements)
+    ? geometry
+    : undefined
 }

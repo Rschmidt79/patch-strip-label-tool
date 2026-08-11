@@ -395,40 +395,6 @@ input:disabled {
   line-height: 1.55;
 }
 
-.print-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: #12171a;
-  cursor: pointer;
-}
-
-.print-option input {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  accent-color: var(--accent-dark);
-}
-
-.print-option strong,
-.print-option small {
-  display: block;
-}
-
-.print-option strong {
-  color: #dce3e6;
-  font-size: 11px;
-}
-
-.print-option small {
-  margin-top: 2px;
-  color: var(--text-dim);
-  font-size: 9px;
-}
 
 .delete-strip-confirmation .button-danger {
   border-color: #a84f49;
@@ -784,11 +750,6 @@ input:disabled {
   background: var(--accent);
 }
 
-.pdf-qr-toggle {
-  margin-top: 13px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
 
 .segmented-control {
   display: grid;

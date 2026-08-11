@@ -83,7 +83,6 @@ export function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false)
   const [showCalibrationReminder, setShowCalibrationReminder] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
-  const [includeSupportQr, setIncludeSupportQr] = useState(true)
   const [pendingDeleteStripId, setPendingDeleteStripId] = useState<string>()
   const [busyAction, setBusyAction] = useState<
     'pdf' | 'print' | 'calibration'
@@ -256,7 +255,7 @@ export function App() {
     setNotice(undefined)
     try {
       const { createLabelsPdf } = await import('./lib/pdf-export')
-      const bytes = await createLabelsPdf(project, { includeSupportQr })
+      const bytes = await createLabelsPdf(project)
       const fileName = createLabelsPdfFileName(project.name)
       downloadBytes(bytes, fileName, 'application/pdf')
       setNotice({ kind: 'success', message: `Created ${fileName} without scaling.` })
@@ -287,7 +286,7 @@ export function App() {
     setNotice(undefined)
     try {
       const { createLabelsPdf } = await import('./lib/pdf-export')
-      const bytes = await createLabelsPdf(project, { includeSupportQr })
+      const bytes = await createLabelsPdf(project)
       openPdfBytesInWindow(bytes, printWindow)
       setNotice({
         kind: 'success',
@@ -616,19 +615,6 @@ export function App() {
             <span className="eyebrow">Before printing</span>
             <h2 id="print-reminder-title">{PRINT_SCALING_TITLE}</h2>
             <p>{PRINT_SCALING_BODY}</p>
-            <label className="print-option">
-              <input
-                type="checkbox"
-                checked={includeSupportQr}
-                onChange={(event) =>
-                  setIncludeSupportQr(event.target.checked)
-                }
-              />
-              <span>
-                <strong>Include support QR</strong>
-                <small>Placed only in the reserved page area.</small>
-              </span>
-            </label>
             <div className="modal-actions">
               <button
                 className="button button-quiet"
@@ -733,7 +719,6 @@ export function App() {
           selectedRangeLabel={selectedRangeLabel}
           selectedRange={resolvedSelection}
           selectedGroupHeader={selectedGroupHeader}
-          includeSupportQr={includeSupportQr}
           onPageChange={(page) =>
             updateProject((current) => ({ ...current, page }))
           }
@@ -752,14 +737,12 @@ export function App() {
           }
           onApplyAutoNumberingToAll={handleApplyAutoNumberingToAll}
           onClearSelectedCells={handleClearSelectedCells}
-          onIncludeSupportQrChange={setIncludeSupportQr}
         />
         <Workspace
           project={project}
           strips={project.strips}
           pageLayoutPlan={pageLayout.plan}
           pageLayoutError={pageLayout.error}
-          includeSupportQr={includeSupportQr}
           activeStripId={activeStripId}
           selectedCellIds={resolvedSelection?.cellIds ?? []}
           editingCellId={editingCellId}

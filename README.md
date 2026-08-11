@@ -102,8 +102,9 @@ Save downloads a human-readable, versioned `.patch-labels.json` project. Open va
 Auto numbering accepts `{n}` anywhere in either line template; the adjacent `#` button inserts it automatically. Click a cell to select and edit it, then Shift-click another cell to select a contiguous range. Numbering, clearing, group headers, and cell appearance changes can be applied to the selected range without changing neighboring cells.
 
 New strips begin empty. The neutral `Router Out` / `{n}` numbering template is
-only applied when the user explicitly chooses Apply. Normal label PDFs can
-optionally include the bundled Buy Me a Coffee QR in the reserved page area;
-it never changes strip placement or appears in calibration PDFs.
+only applied when the user explicitly chooses Apply. Normal label and Print
+PDFs automatically include the bundled Buy Me a Coffee QR in a collision-safe
+bottom-right decoration area. It never changes strip placement and never
+appears in calibration PDFs.
 
 CSV, PWA behavior, accounts, printer correction factors, analytics, cloud save, nested headers, and arbitrary uploaded fonts are intentionally not implemented.

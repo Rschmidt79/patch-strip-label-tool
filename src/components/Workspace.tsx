@@ -8,7 +8,6 @@ interface WorkspaceProps {
   strips: LabelStrip[]
   pageLayoutPlan: PdfLayoutPlan | undefined
   pageLayoutError: string | undefined
-  includeSupportQr: boolean
   activeStripId: string | undefined
   selectedCellIds: readonly string[]
   editingCellId: string | undefined
@@ -46,7 +45,6 @@ export function Workspace({
   strips,
   pageLayoutPlan,
   pageLayoutError,
-  includeSupportQr,
   activeStripId,
   selectedCellIds,
   editingCellId,
@@ -153,7 +151,6 @@ export function Workspace({
             project={project}
             plan={pageLayoutPlan}
             error={pageLayoutError}
-            includeSupportQr={includeSupportQr}
           />
         </>
       )}

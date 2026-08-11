@@ -32,7 +32,6 @@ interface SidebarProps {
   selectedRangeLabel: string | undefined
   selectedRange: CellRange | undefined
   selectedGroupHeader: GroupHeader | undefined
-  includeSupportQr: boolean
   onPageChange: (page: PageSettings) => void
   onUpdateStrip: (updater: (strip: LabelStrip) => LabelStrip) => void
   onUpdateCell: (updater: (cell: LabelCell) => LabelCell) => void
@@ -47,7 +46,6 @@ interface SidebarProps {
   onApplyAutoNumberingToSelection: () => void
   onApplyAutoNumberingToAll: () => void
   onClearSelectedCells: () => void
-  onIncludeSupportQrChange: (include: boolean) => void
 }
 
 interface NumberFieldProps {
@@ -268,7 +266,6 @@ export function Sidebar({
   selectedRangeLabel,
   selectedRange,
   selectedGroupHeader,
-  includeSupportQr,
   onPageChange,
   onUpdateStrip,
   onUpdateCell,
@@ -281,7 +278,6 @@ export function Sidebar({
   onApplyAutoNumberingToSelection,
   onApplyAutoNumberingToAll,
   onClearSelectedCells,
-  onIncludeSupportQrChange,
 }: SidebarProps) {
   const matchingPreset = activeStrip
     ? STRIP_PRESETS.find(
@@ -336,19 +332,6 @@ export function Sidebar({
           PDF rotates and packs strips automatically. Labels are never scaled
           to fit.
         </p>
-        <label className="toggle-field pdf-qr-toggle">
-          <span>
-            <strong>Include support QR</strong>
-            <small>PDF page decoration only; never part of a label.</small>
-          </span>
-          <input
-            type="checkbox"
-            checked={includeSupportQr}
-            onChange={(event) =>
-              onIncludeSupportQrChange(event.target.checked)
-            }
-          />
-        </label>
       </section>
 
       <section className="sidebar-panel">
