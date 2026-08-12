@@ -1,4 +1,4 @@
-export type PageSize = 'A4' | 'A3'
+export type PageSize = 'A4' | 'A3' | 'Letter' | 'Legal' | 'Tabloid'
 export type PageOrientation = 'portrait' | 'landscape'
 export type TextAlignment = 'left' | 'center' | 'right'
 export type FontWeight = 'normal' | 'bold'

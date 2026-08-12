@@ -1,5 +1,6 @@
 import type { PageOrientation, PageSize } from '../model/project'
 import { APP_NAME } from './branding'
+import { getPageSizeDisplayName } from './pages'
 
 export const APP_VERSION = __APP_VERSION__
 export const BUILD_DATE = __BUILD_DATE__
@@ -36,7 +37,7 @@ export function createFeedbackMailto({
 }: FeedbackDiagnostics): string {
   const subject = `${APP_NAME} feedback`
   const safeBrowser = safeDiagnosticLine(browser)
-  const safePageFormat = safeDiagnosticLine(pageFormat)
+  const safePageFormat = safeDiagnosticLine(getPageSizeDisplayName(pageFormat))
   const safeOrientation = safeDiagnosticLine(orientation)
   const body = [
     `${APP_NAME} feedback`,

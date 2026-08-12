@@ -3,6 +3,7 @@ import type {
   PageSettings,
   PageSize,
 } from '../model/project'
+import { isPageSize } from '../config/pages'
 
 export const PRINT_PREFERENCES_STORAGE_KEY =
   'rack-label-maker.print-preferences.v1'
@@ -77,7 +78,7 @@ export function parsePrintPreferences(
   value: unknown,
 ): PrintPreferences | undefined {
   if (!isRecord(value) || value.version !== 1) return undefined
-  if (value.paperSize !== 'A4' && value.paperSize !== 'A3') return undefined
+  if (!isPageSize(value.paperSize)) return undefined
   if (
     value.orientation !== 'portrait' &&
     value.orientation !== 'landscape'

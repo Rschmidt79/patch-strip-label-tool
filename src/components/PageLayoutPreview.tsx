@@ -14,6 +14,10 @@ import {
   SUPPORT_QR_LABEL_LINE_1,
   SUPPORT_QR_LABEL_LINE_2,
 } from '../lib/support-qr'
+import {
+  getPageSizeDisplayName,
+  PAGE_SIZE_IDS,
+} from '../config/pages'
 
 interface PageLayoutPreviewProps {
   project: LabelProject
@@ -65,7 +69,8 @@ export function PageLayoutPreview({
         </span>
         {plan && (
           <b>
-            {preferences.paperSize} {preferences.orientation} · {plan.pageCount}{' '}
+            {getPageSizeDisplayName(preferences.paperSize)}{' '}
+            {preferences.orientation} · {plan.pageCount}{' '}
             {plan.pageCount === 1 ? 'page' : 'pages'}
           </b>
         )}
@@ -99,12 +104,16 @@ export function PageLayoutPreview({
                   value={preferences.paperSize}
                   onChange={(event) =>
                     updatePreferences({
-                      paperSize: event.target.value as 'A4' | 'A3',
+                      paperSize:
+                        event.target.value as PrintPreferences['paperSize'],
                     })
                   }
                 >
-                  <option value="A4">A4</option>
-                  <option value="A3">A3</option>
+                  {PAGE_SIZE_IDS.map((size) => (
+                    <option key={size} value={size}>
+                      {getPageSizeDisplayName(size)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>

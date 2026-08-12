@@ -33,6 +33,7 @@ import {
   type LegacyPrintSettings,
 } from './print-preferences'
 import { inferProjectNameFromFileName } from './project-file-name'
+import { PAGE_SIZE_IDS } from '../config/pages'
 
 export interface ProjectImportResult {
   project: LabelProject
@@ -140,7 +141,7 @@ function parsePageSettingsWithCompatibility(
     throw new ProjectFileError('page.stripGapMm must be a finite number.')
   }
   const parsed: PageSettings = {
-    size: expectEnum(page.size, 'page.size', ['A4', 'A3']),
+    size: expectEnum(page.size, 'page.size', PAGE_SIZE_IDS),
     orientation: expectEnum(page.orientation, 'page.orientation', [
       'portrait',
       'landscape',
