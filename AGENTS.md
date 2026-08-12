@@ -41,8 +41,14 @@ Constants for conversion live in `src/lib/dimensions.ts`. Reuse them instead of 
 - `src/lib/strip.ts`: pure strip transformations such as resizing and duplication.
 - `src/lib/auto-numbering.ts`: pure sequence formatting, range-bounded template application, and range clearing.
 - `src/lib/project-file.ts`: schema-version dispatch, complete JSON validation, serialization, and file reading.
+- `src/config/project-files.ts`: canonical project extension, legacy extension, picker accept string, and custom MIME type.
+- `src/lib/project-file-name.ts`: sanitized `.racklabel` filename generation and filename-based fallback project names.
+- `src/lib/file-handling.ts`: feature-detected installed-PWA launch-file integration that delegates to the normal project reader.
 - `src/lib/geometry.ts`: reusable rotated-rectangle bounds, exact fit-angle candidates, corners, and overlap geometry in millimeters.
 - `src/lib/pdf-layout.ts`: deterministic unscaled horizontal/vertical/diagonal page packing and fit failures in millimeters.
+- `src/lib/print-preferences.ts`: versioned local print/export preferences, validation, and legacy stored-gap compatibility.
+- `src/lib/print-layout.ts`: shared composition of packing placements and page cut-guide geometry for preview and PDF.
+- `src/lib/cut-guides.ts`: pure coincident-edge, deduplicated cut-line, shared-edge, and crop-mark geometry in millimeters.
 - `src/lib/pdf-export.ts`: dynamically loaded client-side vector PDF and calibration generation.
 - `src/lib/download.ts`: browser Blob download, dated PDF filename, and print-tab helpers.
 - `src/components/Toolbar.tsx`: project identity and top-level actions.
@@ -82,7 +88,7 @@ Keep geometry/domain functions pure where practical. Keep components focused on 
 
 ## PDF implementation
 
-`pdf-lib` is the only PDF runtime dependency. `src/lib/pdf-export.ts` constructs custom-sized PDF pages and vector content directly in points. It must not inspect rendered SVG/DOM dimensions. The shared placement planner uses 10 mm margins, reserves 10 mm for the print warning, and maintains 3 mm gaps between conservative rotated bounds. It tries horizontal placements first, vertical placements second, and the least diagonal rotation only when neither cardinal orientation can physically fit. Candidate positions are evaluated top-to-bottom and left-to-right, making the result deterministic. New pages are added as required. A strip with no true-size placement at any angle aborts export with a clear error; it is never scaled.
+`pdf-lib` is the only PDF runtime dependency. `src/lib/pdf-export.ts` constructs custom-sized PDF pages and vector content directly in points. It must not inspect rendered SVG/DOM dimensions. Print/export settings are separate local preferences; they default to edge-to-edge placement, vector cut lines, and vector crop marks, while Custom spacing starts at 2 mm. The shared placement planner uses 10 mm margins, reserves 10 mm for the print warning, and tries horizontal and vertical placements before a heuristic diagonal search over multiple angles and staggered long-axis offsets. Diagonal bounds checks, collision checks, and spacing use the actual oriented strip polygons rather than conservative rotated bounding boxes. Touching edges are valid at zero gap, positive-area overlap is never valid, and coincident cut edges are emitted only once. Candidate scoring first maximizes strips fitted on the current page, then considers compactness, useful shared cutting edges, and deterministic tie-breakers. New pages are added as required. A strip with no true-size placement at any angle aborts export with a clear error; it is never scaled.
 
 The PDF applies rotation with a cosine/sine matrix whose determinant is one. Widths and heights are still converted directly from their original millimeter values. Export and Print both call the same PDF generator; Print opens a Blob PDF in a new browser tab and relies on the browser's normal print UI.
 
@@ -94,6 +100,6 @@ The application is intended to be hosted as a static website. `npm run build` mu
 
 ## Milestone status
 
-Milestones 1 through 3 are implemented: Vite/React/TypeScript foundation, typed editor model, direct SVG editing, strip management, text styling/auto-fit, presets, millimeter geometry, range-aware auto numbering and clearing, validated version 1 JSON save/open, A4/A3 deterministic unscaled packing, automatic diagonal rotation, shared page preview, direct PDF print-tab workflow, clear non-fit reporting, calibration PDF, and automated dimensional/domain tests.
+Milestones 1 through 3 are implemented: Vite/React/TypeScript foundation, typed editor model, direct SVG editing, strip management, text styling/auto-fit, presets, millimeter geometry, range-aware auto numbering and clearing, versioned JSON save/open with migrations, A4/A3 deterministic unscaled packing, automatic diagonal rotation, shared page preview, direct PDF print-tab workflow, clear non-fit reporting, calibration PDF, and automated dimensional/domain tests.
 
-Intentionally still pending: CSV import/export, more sophisticated packing optimization, printer correction factors, PWA support, robust dirty-state tracking, custom font embedding, broader Unicode handling, and additional migration versions.
+Intentionally still pending: CSV import/export, mathematically optimal packing, printer correction factors, robust dirty-state tracking, custom font embedding, broader Unicode handling, and additional migration versions.

@@ -1,6 +1,8 @@
 const HALF_TURN_RADIANS = Math.PI
 const RIGHT_ANGLE_DEGREES = 90
-const FIT_TOLERANCE_MM = 1e-8
+export const GEOMETRY_EPSILON_MM = 1e-7
+export const GEOMETRY_EPSILON_MM2 = 1e-7
+export const GEOMETRY_ANGLE_EPSILON_DEGREES = 1e-9
 
 export interface SizeMm {
   widthMm: number
@@ -50,8 +52,8 @@ export function rotatedSizeFitsMm(
     rotationDegrees,
   )
   return (
-    bounds.widthMm <= availableWidthMm + FIT_TOLERANCE_MM &&
-    bounds.heightMm <= availableHeightMm + FIT_TOLERANCE_MM
+    bounds.widthMm <= availableWidthMm + GEOMETRY_EPSILON_MM &&
+    bounds.heightMm <= availableHeightMm + GEOMETRY_EPSILON_MM
   )
 }
 
@@ -106,7 +108,9 @@ function getFitBoundaryAnglesRadians(
     .sort((left, right) => left - right)
     .filter(
       (angle, index, sortedAngles) =>
-        index === 0 || Math.abs(angle - sortedAngles[index - 1]) > 1e-12,
+        index === 0 ||
+        Math.abs(angle - sortedAngles[index - 1]) >
+          degreesToRadians(GEOMETRY_ANGLE_EPSILON_DEGREES),
     )
 }
 
@@ -154,7 +158,8 @@ export function findMinimumRotationToFitMm(
 
     return {
       rotationDegrees:
-        Math.abs(rotationDegrees - RIGHT_ANGLE_DEGREES) < 1e-10
+        Math.abs(rotationDegrees - RIGHT_ANGLE_DEGREES) <
+        GEOMETRY_ANGLE_EPSILON_DEGREES
           ? RIGHT_ANGLE_DEGREES
           : rotationDegrees,
       ...getRotatedBoundingSizeMm(widthMm, heightMm, rotationDegrees),
@@ -213,6 +218,7 @@ function projectPolygonOntoAxis(
   }
 }
 
+/** Returns true only for positive-area overlap; shared edges are valid. */
 export function polygonsOverlapMm(
   first: readonly PointMm[],
   second: readonly PointMm[],
@@ -227,22 +233,59 @@ export function polygonsOverlapMm(
       const edgeX = end.xMm - start.xMm
       const edgeY = end.yMm - start.yMm
       const axisLength = Math.hypot(edgeX, edgeY)
-      if (axisLength <= FIT_TOLERANCE_MM) continue
+      if (axisLength <= GEOMETRY_EPSILON_MM) continue
       const axisX = -edgeY / axisLength
       const axisY = edgeX / axisLength
       const firstProjection = projectPolygonOntoAxis(first, axisX, axisY)
       const secondProjection = projectPolygonOntoAxis(second, axisX, axisY)
-      if (
-        firstProjection.maximum <
-          secondProjection.minimum - FIT_TOLERANCE_MM ||
-        secondProjection.maximum <
-          firstProjection.minimum - FIT_TOLERANCE_MM
-      ) {
+      const overlapMm =
+        Math.min(firstProjection.maximum, secondProjection.maximum) -
+        Math.max(firstProjection.minimum, secondProjection.minimum)
+      if (overlapMm <= GEOMETRY_EPSILON_MM) {
         return false
       }
     }
   }
 
+  return true
+}
+
+/**
+ * Convex polygon intersection test, including coincident edges and points.
+ */
+export function polygonsIntersectMm(
+  first: readonly PointMm[],
+  second: readonly PointMm[],
+): boolean {
+  if (first.length < 3 || second.length < 3) return false
+  for (const polygon of [first, second]) {
+    for (let index = 0; index < polygon.length; index += 1) {
+      const start = polygon[index]
+      const end = polygon[(index + 1) % polygon.length]
+      const edgeX = end.xMm - start.xMm
+      const edgeY = end.yMm - start.yMm
+      const axisLength = Math.hypot(edgeX, edgeY)
+      if (axisLength <= GEOMETRY_EPSILON_MM) continue
+      const firstProjection = projectPolygonOntoAxis(
+        first,
+        -edgeY / axisLength,
+        edgeX / axisLength,
+      )
+      const secondProjection = projectPolygonOntoAxis(
+        second,
+        -edgeY / axisLength,
+        edgeX / axisLength,
+      )
+      if (
+        firstProjection.maximum <
+          secondProjection.minimum - GEOMETRY_EPSILON_MM ||
+        secondProjection.maximum <
+          firstProjection.minimum - GEOMETRY_EPSILON_MM
+      ) {
+        return false
+      }
+    }
+  }
   return true
 }
 
@@ -307,9 +350,34 @@ export function polygonsMaintainGapMm(
   second: readonly PointMm[],
   minimumGapMm: number,
 ): boolean {
+  if (polygonsOverlapMm(first, second)) return false
   return (
-    getMinimumPolygonDistanceMm(first, second) + FIT_TOLERANCE_MM >=
+    getMinimumPolygonDistanceMm(first, second) + GEOMETRY_EPSILON_MM >=
     minimumGapMm
+  )
+}
+
+export function pointIsInsideRectMm(
+  point: PointMm,
+  rectangle: RectMm,
+): boolean {
+  return (
+    point.xMm >= rectangle.xMm - GEOMETRY_EPSILON_MM &&
+    point.xMm <=
+      rectangle.xMm + rectangle.widthMm + GEOMETRY_EPSILON_MM &&
+    point.yMm >= rectangle.yMm - GEOMETRY_EPSILON_MM &&
+    point.yMm <=
+      rectangle.yMm + rectangle.heightMm + GEOMETRY_EPSILON_MM
+  )
+}
+
+export function polygonIsInsideRectMm(
+  polygon: readonly PointMm[],
+  rectangle: RectMm,
+): boolean {
+  return (
+    polygon.length >= 3 &&
+    polygon.every((point) => pointIsInsideRectMm(point, rectangle))
   )
 }
 
@@ -319,9 +387,13 @@ export function rectanglesOverlapMm(
   gapMm = 0,
 ): boolean {
   return !(
-    left.xMm + left.widthMm + gapMm <= right.xMm + FIT_TOLERANCE_MM ||
-    right.xMm + right.widthMm + gapMm <= left.xMm + FIT_TOLERANCE_MM ||
-    left.yMm + left.heightMm + gapMm <= right.yMm + FIT_TOLERANCE_MM ||
-    right.yMm + right.heightMm + gapMm <= left.yMm + FIT_TOLERANCE_MM
+    left.xMm + left.widthMm + gapMm <=
+      right.xMm + GEOMETRY_EPSILON_MM ||
+    right.xMm + right.widthMm + gapMm <=
+      left.xMm + GEOMETRY_EPSILON_MM ||
+    left.yMm + left.heightMm + gapMm <=
+      right.yMm + GEOMETRY_EPSILON_MM ||
+    right.yMm + right.heightMm + gapMm <=
+      left.yMm + GEOMETRY_EPSILON_MM
   )
 }

@@ -5,12 +5,19 @@ import {
   PRINT_SCALING_TITLE,
   SUPPORT_URL,
 } from '../config/app-info'
+import { APP_NAME } from '../config/branding'
 
 interface AboutDialogProps {
+  installPromptAvailable: boolean
+  onInstallApp: () => void | Promise<void>
   onClose: () => void
 }
 
-export function AboutDialog({ onClose }: AboutDialogProps) {
+export function AboutDialog({
+  installPromptAvailable,
+  onInstallApp,
+  onClose,
+}: AboutDialogProps) {
   return (
     <div
       className="modal-backdrop"
@@ -28,7 +35,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
         <div className="about-heading">
           <div>
             <span className="eyebrow">Help / About</span>
-            <h2 id="about-dialog-title">Patch Strip Label Tool</h2>
+            <h2 id="about-dialog-title">{APP_NAME}</h2>
             <p>
               Create editable rack and patch-panel labels at true physical
               dimensions, entirely in your browser.
@@ -62,7 +69,8 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
               inside the configured physical strip height.
             </li>
             <li>
-              Projects can be saved locally and reopened later.
+              Projects are saved as <code>.racklabel</code> files. Older JSON
+              project files can still be opened.
             </li>
             <li>
               Label data stays in this browser; the application has no backend
@@ -70,6 +78,21 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
             </li>
           </ul>
         </div>
+
+        {installPromptAvailable && (
+          <div className="about-install">
+            <div>
+              <h3>Install Rack Label Maker</h3>
+              <p>
+                Install the app to use it offline and, on supported desktop
+                platforms, open <code>.racklabel</code> files directly.
+              </p>
+            </div>
+            <button className="button button-small" onClick={onInstallApp}>
+              Install App
+            </button>
+          </div>
+        )}
 
         <div className="about-support">
           <div>

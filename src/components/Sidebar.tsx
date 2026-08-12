@@ -18,21 +18,16 @@ import type {
   GroupHeader,
   LabelCell,
   LabelStrip,
-  PageOrientation,
-  PageSettings,
-  PageSize,
   TextAlignment,
 } from '../model/project'
 
 interface SidebarProps {
-  page: PageSettings
   activeStrip: LabelStrip | undefined
   selectedCell: LabelCell | undefined
   selectedCellCount: number
   selectedRangeLabel: string | undefined
   selectedRange: CellRange | undefined
   selectedGroupHeader: GroupHeader | undefined
-  onPageChange: (page: PageSettings) => void
   onUpdateStrip: (updater: (strip: LabelStrip) => LabelStrip) => void
   onUpdateCell: (updater: (cell: LabelCell) => LabelCell) => void
   onAddGroupHeader: (text: string) => void
@@ -259,14 +254,12 @@ function AutoNumberTemplateField({
 }
 
 export function Sidebar({
-  page,
   activeStrip,
   selectedCell,
   selectedCellCount,
   selectedRangeLabel,
   selectedRange,
   selectedGroupHeader,
-  onPageChange,
   onUpdateStrip,
   onUpdateCell,
   onAddGroupHeader,
@@ -297,43 +290,6 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <section className="sidebar-panel">
-        <PanelTitle title="Page setup" meta="Output" />
-        <div className="field-row">
-          <label className="field">
-            <span>Paper</span>
-            <select
-              value={page.size}
-              onChange={(event) =>
-                onPageChange({ ...page, size: event.target.value as PageSize })
-              }
-            >
-              <option value="A4">A4</option>
-              <option value="A3">A3</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Orientation</span>
-            <select
-              value={page.orientation}
-              onChange={(event) =>
-                onPageChange({
-                  ...page,
-                  orientation: event.target.value as PageOrientation,
-                })
-              }
-            >
-              <option value="portrait">Portrait</option>
-              <option value="landscape">Landscape</option>
-            </select>
-          </label>
-        </div>
-        <p className="panel-note">
-          PDF rotates and packs strips automatically. Labels are never scaled
-          to fit.
-        </p>
-      </section>
-
       <section className="sidebar-panel">
         <PanelTitle title="Strip dimensions" meta="Millimeters" />
         {activeStrip ? (

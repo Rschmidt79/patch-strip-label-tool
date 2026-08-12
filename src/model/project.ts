@@ -80,6 +80,7 @@ export interface LabelProject {
   name: string
   createdAt: string
   updatedAt: string
+  /** Legacy file compatibility only. Live output uses local PrintPreferences. */
   page: PageSettings
   strips: LabelStrip[]
 }

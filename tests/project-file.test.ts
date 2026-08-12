@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseProjectJson,
+  parseProjectJsonWithCompatibility,
   ProjectFileError,
   serializeProject,
 } from '../src/lib/project-file'
@@ -9,7 +10,7 @@ import { addGroupHeader } from '../src/lib/group-headers'
 import { applyCellAppearanceToRange } from '../src/lib/cell-style'
 
 describe('project JSON files', () => {
-  it('round-trips a version 3 project with headers and cell styles', () => {
+  it('round-trips version 3 label content without print preferences', () => {
     const project = createProject()
     project.strips[0] = addGroupHeader(
       applyCellAppearanceToRange(
@@ -28,6 +29,7 @@ describe('project JSON files', () => {
     const imported = parseProjectJson(serializeProject(project))
     expect(imported).toEqual(project)
     expect(imported.schemaVersion).toBe(3)
+    expect(serializeProject(project)).not.toContain('stripGapMm')
   })
 
   it('migrates version 2 header projects to fixed-height internal bands', () => {
@@ -95,10 +97,31 @@ describe('project JSON files', () => {
 
   it('rejects unsupported future versions', () => {
     const value = JSON.parse(serializeProject(createProject()))
-    value.schemaVersion = 4
+    value.schemaVersion = 5
     expect(() => parseProjectJson(JSON.stringify(value))).toThrow(
-      'Project version 4 is not supported',
+      'Project version 5 is not supported',
     )
+  })
+
+  it('extracts a schema 4 stored gap without retaining it in label data', () => {
+    const legacy = JSON.parse(serializeProject(createProject()))
+    legacy.schemaVersion = 4
+    legacy.page.stripGapMm = 3.5
+
+    const imported = parseProjectJsonWithCompatibility(JSON.stringify(legacy))
+    expect(imported.project.schemaVersion).toBe(3)
+    expect(imported.legacyPrintSettings.stripGapMm).toBe(3.5)
+    expect(serializeProject(imported.project)).not.toContain('stripGapMm')
+  })
+
+  it('requires the legacy gap to be valid in schema 4 files', () => {
+    const legacy = JSON.parse(serializeProject(createProject()))
+    legacy.schemaVersion = 4
+    legacy.page.stripGapMm = -1
+
+    expect(() =>
+      parseProjectJsonWithCompatibility(JSON.stringify(legacy)),
+    ).toThrow('page.stripGapMm must be at least 0.')
   })
 
   it('rejects mismatched cell counts', () => {

@@ -1,8 +1,12 @@
 import type { LabelProject } from '../model/project'
-import type { PdfLayoutPlan } from '../lib/pdf-layout'
+import type { PrintLayoutPlan } from '../lib/print-layout'
+import { getRotationOriginForBoundsMm } from '../lib/geometry'
+import type { LineSegmentMm } from '../lib/cut-guides'
 import {
-  getRotationOriginForBoundsMm,
-} from '../lib/geometry'
+  MAX_CUSTOM_STRIP_GAP_MM,
+  MIN_CUSTOM_STRIP_GAP_MM,
+  type PrintPreferences,
+} from '../lib/print-preferences'
 import { StripArtwork } from './StripArtwork'
 import supportQrImageUrl from '../assets/bmc_qr.png'
 import {
@@ -13,16 +17,42 @@ import {
 
 interface PageLayoutPreviewProps {
   project: LabelProject
-  plan: PdfLayoutPlan | undefined
+  preferences: PrintPreferences
+  plan: PrintLayoutPlan | undefined
   error: string | undefined
+  onPreferencesChange: (preferences: PrintPreferences) => void
+}
+
+function PrintGuideLine({
+  segment,
+  pageHeightMm,
+  className,
+}: {
+  segment: LineSegmentMm
+  pageHeightMm: number
+  className: string
+}) {
+  return (
+    <line
+      className={className}
+      x1={segment.start.xMm}
+      y1={pageHeightMm - segment.start.yMm}
+      x2={segment.end.xMm}
+      y2={pageHeightMm - segment.end.yMm}
+    />
+  )
 }
 
 export function PageLayoutPreview({
   project,
+  preferences,
   plan,
   error,
+  onPreferencesChange,
 }: PageLayoutPreviewProps) {
   const stripsById = new Map(project.strips.map((strip) => [strip.id, strip]))
+  const updatePreferences = (change: Partial<PrintPreferences>) =>
+    onPreferencesChange({ ...preferences, ...change })
 
   return (
     <details className="page-layout-preview" open>
@@ -35,11 +65,139 @@ export function PageLayoutPreview({
         </span>
         {plan && (
           <b>
-            {project.page.size} {project.page.orientation} · {plan.pageCount}{' '}
+            {preferences.paperSize} {preferences.orientation} · {plan.pageCount}{' '}
             {plan.pageCount === 1 ? 'page' : 'pages'}
           </b>
         )}
       </summary>
+
+      <section className="print-layout-settings" aria-label="Print layout">
+        <div className="print-layout-settings-heading">
+          <div>
+            <strong>Print layout</strong>
+            <small>Saved locally · label content is unchanged</small>
+          </div>
+          <label className="print-setting-toggle">
+            <input
+              type="checkbox"
+              checked={preferences.autoArrange}
+              onChange={(event) =>
+                updatePreferences({ autoArrange: event.target.checked })
+              }
+            />
+            <span>Auto arrange</span>
+          </label>
+        </div>
+
+        <div className="print-layout-settings-grid">
+          <fieldset>
+            <legend>Paper</legend>
+            <div className="print-paper-fields">
+              <label>
+                <span>Size</span>
+                <select
+                  value={preferences.paperSize}
+                  onChange={(event) =>
+                    updatePreferences({
+                      paperSize: event.target.value as 'A4' | 'A3',
+                    })
+                  }
+                >
+                  <option value="A4">A4</option>
+                  <option value="A3">A3</option>
+                </select>
+              </label>
+              <label>
+                <span>Orientation</span>
+                <select
+                  value={preferences.orientation}
+                  onChange={(event) =>
+                    updatePreferences({
+                      orientation: event.target.value as
+                        | 'portrait'
+                        | 'landscape',
+                    })
+                  }
+                >
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Spacing</legend>
+            <label className="print-setting-choice">
+              <input
+                type="radio"
+                name="strip-spacing"
+                checked={preferences.spacingMode === 'edge-to-edge'}
+                onChange={() =>
+                  updatePreferences({ spacingMode: 'edge-to-edge' })
+                }
+              />
+              <span>Edge-to-edge</span>
+              <small>0 mm · shared cuts</small>
+            </label>
+            <label className="print-setting-choice custom-gap-choice">
+              <input
+                type="radio"
+                name="strip-spacing"
+                checked={preferences.spacingMode === 'custom'}
+                onChange={() => updatePreferences({ spacingMode: 'custom' })}
+              />
+              <span>Custom gap</span>
+              <span className="print-gap-input">
+                <input
+                  type="number"
+                  aria-label="Custom strip gap in millimeters"
+                  value={preferences.customGapMm}
+                  min={MIN_CUSTOM_STRIP_GAP_MM}
+                  max={MAX_CUSTOM_STRIP_GAP_MM}
+                  step={0.5}
+                  disabled={preferences.spacingMode !== 'custom'}
+                  onChange={(event) => {
+                    const customGapMm = Number(event.target.value)
+                    if (
+                      Number.isFinite(customGapMm) &&
+                      customGapMm >= MIN_CUSTOM_STRIP_GAP_MM &&
+                      customGapMm <= MAX_CUSTOM_STRIP_GAP_MM
+                    ) {
+                      updatePreferences({ customGapMm })
+                    }
+                  }}
+                />
+                mm
+              </span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Cut guides</legend>
+            <label className="print-setting-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.cutLines}
+                onChange={(event) =>
+                  updatePreferences({ cutLines: event.target.checked })
+                }
+              />
+              <span>Cut lines</span>
+            </label>
+            <label className="print-setting-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.cropMarks}
+                onChange={(event) =>
+                  updatePreferences({ cropMarks: event.target.checked })
+                }
+              />
+              <span>Crop marks</span>
+            </label>
+          </fieldset>
+        </div>
+      </section>
 
       {error && (
         <div className="page-layout-error" role="status">
@@ -52,6 +210,9 @@ export function PageLayoutPreview({
           {Array.from({ length: plan.pageCount }, (_, pageIndex) => {
             const pagePlacements = plan.placements.filter(
               (placement) => placement.pageIndex === pageIndex,
+            )
+            const pageGuides = plan.pageGuides.find(
+              (guides) => guides.pageIndex === pageIndex,
             )
             const usableTopSvgMm =
               plan.pageHeightMm -
@@ -174,6 +335,27 @@ export function PageLayoutPreview({
                       </g>
                     )
                   })}
+
+                  {pageGuides && (
+                    <g aria-hidden="true">
+                      {pageGuides.cutLines.map((segment, index) => (
+                        <PrintGuideLine
+                          key={`cut-${index}`}
+                          segment={segment}
+                          pageHeightMm={plan.pageHeightMm}
+                          className="page-preview-cut-line"
+                        />
+                      ))}
+                      {pageGuides.cropMarks.map((segment, index) => (
+                        <PrintGuideLine
+                          key={`crop-${index}`}
+                          segment={segment}
+                          pageHeightMm={plan.pageHeightMm}
+                          className="page-preview-crop-mark"
+                        />
+                      ))}
+                    </g>
+                  )}
                 </svg>
               </figure>
             )

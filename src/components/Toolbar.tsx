@@ -1,5 +1,7 @@
 import { useRef } from 'react'
 import { MAX_NAME_LENGTH } from '../config/content-limits'
+import { PROJECT_FILE_ACCEPT } from '../config/project-files'
+import { APP_NAME } from '../config/branding'
 
 interface ToolbarProps {
   projectName: string
@@ -28,15 +30,15 @@ export function Toolbar({
 
   return (
     <header className="topbar">
-      <div className="brand" aria-label="Patch Strip Label Tool">
+      <div className="brand" aria-label={APP_NAME}>
         <div className="brand-mark" aria-hidden="true">
           <span />
           <span />
           <span />
         </div>
         <div>
-          <strong>Patch Strip</strong>
-          <small>Label Tool</small>
+          <strong>Rack Label</strong>
+          <small>Maker</small>
         </div>
         <span className="beta-badge">Beta</span>
       </div>
@@ -65,8 +67,8 @@ export function Toolbar({
           ref={fileInputRef}
           className="visually-hidden"
           type="file"
-          accept=".json,application/json"
-          aria-label="Open project JSON file"
+          accept={PROJECT_FILE_ACCEPT}
+          aria-label="Open Rack Label Maker project file"
           onChange={async (event) => {
             const file = event.target.files?.[0]
             event.target.value = ''

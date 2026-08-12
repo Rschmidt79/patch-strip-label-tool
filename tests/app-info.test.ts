@@ -24,7 +24,7 @@ describe('beta application information', () => {
     const body = parameters.get('body') ?? ''
 
     expect(href.startsWith(`mailto:${FEEDBACK_EMAIL_ADDRESS}?`)).toBe(true)
-    expect(parameters.get('subject')).toBe('Patch Strip Label Tool feedback')
+    expect(parameters.get('subject')).toBe('Rack Label Maker feedback')
     expect(body).toContain(`Version: v${APP_VERSION}`)
     expect(body).toContain(`Build: ${BUILD_DATE}`)
     expect(body).toContain('Browser: Beta Browser 1.0')

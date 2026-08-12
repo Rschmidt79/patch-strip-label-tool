@@ -1,12 +1,14 @@
 import type { LabelProject, LabelStrip } from '../model/project'
-import type { PdfLayoutPlan } from '../lib/pdf-layout'
+import type { PrintLayoutPlan } from '../lib/print-layout'
+import type { PrintPreferences } from '../lib/print-preferences'
 import { PageLayoutPreview } from './PageLayoutPreview'
 import { StripCard } from './StripCard'
 
 interface WorkspaceProps {
   project: LabelProject
   strips: LabelStrip[]
-  pageLayoutPlan: PdfLayoutPlan | undefined
+  printPreferences: PrintPreferences
+  pageLayoutPlan: PrintLayoutPlan | undefined
   pageLayoutError: string | undefined
   activeStripId: string | undefined
   selectedCellIds: readonly string[]
@@ -14,6 +16,7 @@ interface WorkspaceProps {
   selectionLabel: string | undefined
   previewScale: number
   onPreviewScaleChange: (scale: number) => void
+  onPrintPreferencesChange: (preferences: PrintPreferences) => void
   onActivateStrip: (stripId: string) => void
   onRenameStrip: (stripId: string, name: string) => void
   onSelectCell: (
@@ -43,6 +46,7 @@ interface WorkspaceProps {
 export function Workspace({
   project,
   strips,
+  printPreferences,
   pageLayoutPlan,
   pageLayoutError,
   activeStripId,
@@ -51,6 +55,7 @@ export function Workspace({
   selectionLabel,
   previewScale,
   onPreviewScaleChange,
+  onPrintPreferencesChange,
   onActivateStrip,
   onRenameStrip,
   onSelectCell,
@@ -149,8 +154,10 @@ export function Workspace({
           </button>
           <PageLayoutPreview
             project={project}
+            preferences={printPreferences}
             plan={pageLayoutPlan}
             error={pageLayoutError}
+            onPreferencesChange={onPrintPreferencesChange}
           />
         </>
       )}

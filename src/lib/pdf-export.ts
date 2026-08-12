@@ -24,9 +24,22 @@ import {
 } from './group-headers'
 import {
   PDF_MARGIN_MM,
-  planPdfLayout,
   type PdfStripPlacement,
 } from './pdf-layout'
+import {
+  CROP_MARK_WIDTH_MM,
+  CUT_LINE_WIDTH_MM,
+  type LineSegmentMm,
+} from './cut-guides'
+import { APP_NAME } from '../config/branding'
+import {
+  planPrintLayout,
+  type PrintLayoutPlan,
+} from './print-layout'
+import {
+  resolveInitialPrintPreferences,
+  type PrintPreferences,
+} from './print-preferences'
 import {
   getSafeSupportQrDecorationGeometryMm,
   SUPPORT_QR_LABEL_LINE_1,
@@ -71,6 +84,26 @@ export interface PdfStripTransform {
   d: number
   translateXPt: number
   translateYPt: number
+}
+
+function drawGuideLine(
+  page: PDFPage,
+  segment: LineSegmentMm,
+  widthMm: number,
+  shade: number,
+): void {
+  page.drawLine({
+    start: {
+      x: millimetersToPoints(segment.start.xMm),
+      y: millimetersToPoints(segment.start.yMm),
+    },
+    end: {
+      x: millimetersToPoints(segment.end.xMm),
+      y: millimetersToPoints(segment.end.yMm),
+    },
+    thickness: millimetersToPoints(widthMm),
+    color: grayscale(shade),
+  })
 }
 
 function decodePngDataUrl(dataUrl: string): Uint8Array {
@@ -455,13 +488,18 @@ function drawStrip(
 
 export async function createLabelsPdf(
   project: LabelProject,
+  preferences: PrintPreferences = resolveInitialPrintPreferences(
+    undefined,
+    project.page,
+  ),
+  suppliedPlan?: PrintLayoutPlan,
 ): Promise<Uint8Array> {
-  const plan = planPdfLayout(project)
+  const plan = suppliedPlan ?? planPrintLayout(project, preferences)
   const pdf = await PDFDocument.create()
   pdf.setTitle(project.name || 'Patch Strip Labels')
   pdf.setSubject('Dimensionally accurate patch strip labels')
-  pdf.setCreator('Patch Strip Label Tool')
-  pdf.setProducer('Patch Strip Label Tool / pdf-lib')
+  pdf.setCreator(APP_NAME)
+  pdf.setProducer(`${APP_NAME} / pdf-lib`)
 
   const regularFont = await pdf.embedFont(StandardFonts.Helvetica)
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
@@ -509,6 +547,16 @@ export async function createLabelsPdf(
       placement,
       regularFont,
       boldFont,
+    )
+  }
+
+  for (const guides of plan.pageGuides) {
+    const page = pages[guides.pageIndex]
+    guides.cutLines.forEach((segment) =>
+      drawGuideLine(page, segment, CUT_LINE_WIDTH_MM, 0.02),
+    )
+    guides.cropMarks.forEach((segment) =>
+      drawGuideLine(page, segment, CROP_MARK_WIDTH_MM, 0.22),
     )
   }
 
@@ -568,8 +616,8 @@ export async function createCalibrationPdf(
   const pdf = await PDFDocument.create()
   pdf.setTitle('100 mm Patch Strip Printer Calibration')
   pdf.setSubject('Exact 100 mm horizontal and vertical printer calibration')
-  pdf.setCreator('Patch Strip Label Tool')
-  pdf.setProducer('Patch Strip Label Tool / pdf-lib')
+  pdf.setCreator(APP_NAME)
+  pdf.setProducer(`${APP_NAME} / pdf-lib`)
 
   const page = pdf.addPage([
     millimetersToPoints(widthMm),

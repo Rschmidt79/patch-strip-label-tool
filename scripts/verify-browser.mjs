@@ -158,7 +158,7 @@ try {
             'browser.download.dir': downloadDirectory,
             'browser.download.useDownloadDir': true,
             'browser.helperApps.neverAsk.saveToDisk':
-              'application/pdf,application/json,text/json,application/octet-stream',
+              'application/pdf,application/x-racklabel+json,application/json,text/json,application/octet-stream',
             'pdfjs.disabled': true,
           },
         },
@@ -179,7 +179,7 @@ try {
   const betaUi = await execute(
     `return { title: document.title, description: document.querySelector('meta[name="description"]')?.content, beta: document.querySelector('.beta-badge')?.textContent.trim(), version: document.querySelector('.app-footer > span')?.textContent.replace(/\\s+/g, ' ').trim() };`,
   )
-  assert(betaUi.title === 'Patch Strip Label Tool', 'Production HTML title is incorrect')
+  assert(betaUi.title === 'Rack Label Maker', 'Production HTML title is incorrect')
   assert(betaUi.description?.includes('true-size rack'), 'Production meta description is missing')
   assert(betaUi.beta === 'Beta', 'Beta indicator is missing')
   assert(/^v0\.6\.0-beta · Build \d{4}-\d{2}-\d{2}$/.test(betaUi.version), 'Version/build footer is incorrect')
@@ -337,7 +337,7 @@ try {
 
   const beforeSave = await readdir(downloadDirectory)
   await clickButton('Save')
-  const projectFile = await waitForDownload('.json', beforeSave)
+  const projectFile = await waitForDownload('.racklabel', beforeSave)
   const savedProject = JSON.parse(await readFile(projectFile, 'utf8'))
   assert(savedProject.schemaVersion === 3, 'Saved project did not use schema version 3')
   assert(savedProject.strips.length === 2, 'Saved project did not contain both strips')
@@ -412,7 +412,7 @@ try {
 
   const beforeHostileSave = await readdir(downloadDirectory)
   await clickButton('Save')
-  const hostileProjectFile = await waitForDownload('.json', beforeHostileSave)
+  const hostileProjectFile = await waitForDownload('.racklabel', beforeHostileSave)
   const hostileProject = JSON.parse(await readFile(hostileProjectFile, 'utf8'))
   assert(hostileProject.name === attackStrings.at(-1), 'Hostile project name was not saved literally')
   assert(hostileProject.strips[0].name === attackStrings.at(-1), 'Hostile strip name was not saved literally')
@@ -436,7 +436,7 @@ try {
   const aboutState = await execute(
     `const dialog = document.querySelector('.about-dialog'); const text = dialog?.textContent.replace(/\\s+/g, ' ').trim() ?? ''; const support = [...(dialog?.querySelectorAll('a') ?? [])].find((item) => item.textContent.includes('Buy me a coffee')); return { title: dialog?.querySelector('h2')?.textContent, text, supportHref: support?.getAttribute('href'), supportTarget: support?.getAttribute('target'), supportRel: support?.getAttribute('rel'), version: dialog?.querySelector('.about-version')?.textContent.replace(/\\s+/g, ' ').trim() };`,
   )
-  assert(aboutState.title === 'Patch Strip Label Tool', 'Help/About did not open')
+  assert(aboutState.title === 'Rack Label Maker', 'Help/About did not open')
   for (const requiredText of ['true physical dimensions', '100% / Actual Size', 'Do not use Fit or Shrink', 'Shift-click', '{n}', '# button', 'saved', 'inside the configured physical strip height', 'entirely in your browser']) {
     assert(aboutState.text.includes(requiredText), `Help/About is missing: ${requiredText}`)
   }

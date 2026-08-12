@@ -1,4 +1,5 @@
 import type { PageOrientation, PageSize } from '../model/project'
+import { APP_NAME } from './branding'
 
 export const APP_VERSION = __APP_VERSION__
 export const BUILD_DATE = __BUILD_DATE__
@@ -33,12 +34,12 @@ export function createFeedbackMailto({
   pageFormat,
   orientation,
 }: FeedbackDiagnostics): string {
-  const subject = 'Patch Strip Label Tool feedback'
+  const subject = `${APP_NAME} feedback`
   const safeBrowser = safeDiagnosticLine(browser)
   const safePageFormat = safeDiagnosticLine(pageFormat)
   const safeOrientation = safeDiagnosticLine(orientation)
   const body = [
-    'Patch Strip Label Tool feedback',
+    `${APP_NAME} feedback`,
     '',
     `Version: v${APP_VERSION}`,
     `Build: ${BUILD_DATE}`,

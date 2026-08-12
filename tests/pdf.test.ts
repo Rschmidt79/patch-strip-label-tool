@@ -13,6 +13,7 @@ import {
   getMinimumPolygonDistanceMm,
   getRotatedRectangleCornersMm,
   getRotationOriginForBoundsMm,
+  polygonsOverlapMm,
   rectanglesOverlapMm,
 } from '../src/lib/geometry'
 import {
@@ -42,6 +43,7 @@ import {
 import { createProject, createStrip } from '../src/model/defaults'
 import { addGroupHeader } from '../src/lib/group-headers'
 import { applyCellAppearanceToRange } from '../src/lib/cell-style'
+import { getTotalSharedEdgeLengthMm } from '../src/lib/cut-guides'
 
 function getDecodedPageContent(pdf: PDFDocument, pageIndex: number): string {
   const contents = pdf.getPage(pageIndex).node.Contents()
@@ -202,7 +204,7 @@ describe('PDF layout and generation', () => {
     }
   })
 
-  it('packs two 432 mm strips in parallel on one A3 page using real polygons', () => {
+  it('packs two 432 mm strips diagonally on one A3 page using real polygons', () => {
     const project = createProject()
     project.page = { size: 'A3', orientation: 'landscape' }
     project.strips = [
@@ -244,16 +246,28 @@ describe('PDF layout and generation', () => {
     }
   })
 
-  it('adds pages deterministically when all diagonal lanes cannot share one page', () => {
+  it('stagger-packs nine long strips per page before adding pages', () => {
     const project = createProject()
     project.page = { size: 'A3', orientation: 'landscape' }
     project.strips = Array.from({ length: 20 }, (_, index) =>
       createStrip(`Long strip ${index + 1}`, 432, 7.5, 12),
     )
 
-    const plan = planPdfLayout(project)
-    expect(plan.pageCount).toBeGreaterThan(1)
+    const plan = planPdfLayout(project, { stripGapMm: 2 })
+    expect(plan.pageCount).toBe(3)
+    expect(plan.stripGapMm).toBe(2)
     expect(plan.placements).toHaveLength(20)
+    const firstPagePlacements = plan.placements.filter(
+      (placement) => placement.pageIndex === 0,
+    )
+    expect(firstPagePlacements).toHaveLength(9)
+    expect(
+      new Set(
+        firstPagePlacements.map((placement) =>
+          placement.xMm.toFixed(6),
+        ),
+      ).size,
+    ).toBeGreaterThan(1)
     expect(plan.placements.every((placement) => placement.widthMm === 432)).toBe(
       true,
     )
@@ -269,7 +283,7 @@ describe('PDF layout and generation', () => {
             placementPolygon,
             getPlacementPolygonMm(other),
           ),
-        ).toBeGreaterThanOrEqual(PDF_STRIP_GAP_MM - 1e-8)
+        ).toBeGreaterThanOrEqual(2 - 1e-8)
       }
       for (const corner of placementPolygon) {
         expect(corner.xMm).toBeGreaterThanOrEqual(
@@ -286,6 +300,67 @@ describe('PDF layout and generation', () => {
         )
       }
     }
+  })
+
+  it('edge-to-edge packing fits at least as many long strips and shares cuts', () => {
+    const project = createProject()
+    project.page = { size: 'A3', orientation: 'landscape' }
+    project.strips = Array.from({ length: 20 }, (_, index) =>
+      createStrip(`Long strip ${index + 1}`, 432, 7.5, 12),
+    )
+
+    const customGapPlan = planPdfLayout(project, { stripGapMm: 2 })
+    const edgeToEdgePlan = planPdfLayout(project, { stripGapMm: 0 })
+    const pageCount = (plan: typeof edgeToEdgePlan, pageIndex: number) =>
+      plan.placements.filter(
+        (placement) => placement.pageIndex === pageIndex,
+      ).length
+
+    expect(pageCount(customGapPlan, 0)).toBe(9)
+    expect(pageCount(edgeToEdgePlan, 0)).toBeGreaterThanOrEqual(
+      pageCount(customGapPlan, 0),
+    )
+    expect(pageCount(edgeToEdgePlan, 0)).toBe(12)
+    expect(edgeToEdgePlan.pageCount).toBe(2)
+    expect(
+      new Set(edgeToEdgePlan.placements.map(({ stripId }) => stripId)).size,
+    ).toBe(project.strips.length)
+
+    const firstPagePolygons = edgeToEdgePlan.placements
+      .filter((placement) => placement.pageIndex === 0)
+      .map(getPlacementPolygonMm)
+    expect(getTotalSharedEdgeLengthMm(firstPagePolygons)).toBeGreaterThan(0)
+    for (const [index, polygon] of firstPagePolygons.entries()) {
+      for (const other of firstPagePolygons.slice(index + 1)) {
+        expect(polygonsOverlapMm(polygon, other)).toBe(false)
+      }
+    }
+  })
+
+  it('honors the configured physical strip gap', () => {
+    const project = createProject()
+    project.page = { size: 'A3', orientation: 'landscape' }
+    project.strips = Array.from({ length: 4 }, (_, index) =>
+      createStrip(`Long strip ${index + 1}`, 432, 7.5, 12),
+    )
+
+    const plan = planPdfLayout(project, { stripGapMm: 6 })
+    expect(plan.stripGapMm).toBe(6)
+    expect(plan.pageCount).toBe(1)
+    for (const [index, placement] of plan.placements.entries()) {
+      for (const other of plan.placements.slice(index + 1)) {
+        expect(
+          getMinimumPolygonDistanceMm(
+            getPlacementPolygonMm(placement),
+            getPlacementPolygonMm(other),
+          ),
+        ).toBeGreaterThanOrEqual(6 - 1e-8)
+      }
+    }
+
+    expect(() => planPdfLayout(project, { stripGapMm: -1 })).toThrow(
+      'Strip gap must be a non-negative number in mm.',
+    )
   })
 
   it('keeps group-header vectors inside the fixed 7.5 mm PDF strip', async () => {
@@ -408,7 +483,7 @@ describe('PDF layout and generation', () => {
       .map((path) => readFileSync(join(process.cwd(), path), 'utf8'))
       .join('\n')
 
-    expect(appSource.match(/createLabelsPdf\(project\)/g)).toHaveLength(2)
+    expect(appSource.match(/createLabelsPdf\(/g)).toHaveLength(2)
     expect(userInterfaceSource).not.toContain('Include support QR')
     expect(userInterfaceSource).not.toContain('includeSupportQr')
   })

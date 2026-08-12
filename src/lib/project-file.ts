@@ -27,6 +27,17 @@ import {
   MAX_PROJECT_STRIPS,
   MAX_TIMESTAMP_LENGTH,
 } from '../config/content-limits'
+import {
+  MAX_CUSTOM_STRIP_GAP_MM,
+  MIN_CUSTOM_STRIP_GAP_MM,
+  type LegacyPrintSettings,
+} from './print-preferences'
+import { inferProjectNameFromFileName } from './project-file-name'
+
+export interface ProjectImportResult {
+  project: LabelProject
+  legacyPrintSettings: LegacyPrintSettings
+}
 
 export class ProjectFileError extends Error {
   constructor(message: string) {
@@ -120,15 +131,31 @@ function expectEnum<T extends string>(
   return value as T
 }
 
-function parsePageSettings(value: unknown): PageSettings {
+function parsePageSettingsWithCompatibility(
+  value: unknown,
+  requireLegacyStripGap: boolean,
+): { page: PageSettings; legacyStripGapMm?: number } {
   const page = expectRecord(value, 'page')
-  return {
+  if (page.stripGapMm === undefined && requireLegacyStripGap) {
+    throw new ProjectFileError('page.stripGapMm must be a finite number.')
+  }
+  const parsed: PageSettings = {
     size: expectEnum(page.size, 'page.size', ['A4', 'A3']),
     orientation: expectEnum(page.orientation, 'page.orientation', [
       'portrait',
       'landscape',
     ]),
   }
+  const legacyStripGapMm =
+    page.stripGapMm === undefined
+      ? undefined
+      : expectNumber(
+          page.stripGapMm,
+          'page.stripGapMm',
+          MIN_CUSTOM_STRIP_GAP_MM,
+          MAX_CUSTOM_STRIP_GAP_MM,
+        )
+  return { page: parsed, legacyStripGapMm }
 }
 
 function parseTextStyle(value: unknown, path: string): CellTextStyle {
@@ -439,7 +466,10 @@ function parseStrip(value: unknown, index: number): LabelStrip {
   return parsed
 }
 
-function parseSupportedVersion(value: Record<string, unknown>): LabelProject {
+function parseSupportedVersion(
+  value: Record<string, unknown>,
+  version: 1 | 2 | 3 | 4,
+): ProjectImportResult {
   if (!Array.isArray(value.strips))
     throw new ProjectFileError('strips must be a list.')
   if (value.strips.length > MAX_PROJECT_STRIPS) {
@@ -448,13 +478,17 @@ function parseSupportedVersion(value: Record<string, unknown>): LabelProject {
     )
   }
 
+  const parsedPage = parsePageSettingsWithCompatibility(
+    value.page,
+    version === 4,
+  )
   const project: LabelProject = {
     schemaVersion: 3,
     id: expectNonEmptyString(value.id, 'id', MAX_ID_LENGTH),
     name: expectString(value.name, 'name', MAX_NAME_LENGTH),
     createdAt: expectIsoDateString(value.createdAt, 'createdAt'),
     updatedAt: expectIsoDateString(value.updatedAt, 'updatedAt'),
-    page: parsePageSettings(value.page),
+    page: parsedPage.page,
     strips: value.strips.map(parseStrip),
   }
 
@@ -471,10 +505,16 @@ function parseSupportedVersion(value: Record<string, unknown>): LabelProject {
       'Project, strip, cell, and group header IDs must be unique.',
     )
 
-  return project
+  return {
+    project,
+    legacyPrintSettings: {
+      ...parsedPage.page,
+      stripGapMm: parsedPage.legacyStripGapMm,
+    },
+  }
 }
 
-function migrateProject(value: unknown): LabelProject {
+function migrateProject(value: unknown): ProjectImportResult {
   const root = expectRecord(value, 'project')
   const version = expectInteger(root.schemaVersion, 'schemaVersion', 1)
 
@@ -482,7 +522,8 @@ function migrateProject(value: unknown): LabelProject {
     case 1:
     case 2:
     case 3:
-      return parseSupportedVersion(root)
+    case 4:
+      return parseSupportedVersion(root, version)
     default:
       throw new ProjectFileError(
         `Project version ${version} is not supported by this application.`,
@@ -491,6 +532,12 @@ function migrateProject(value: unknown): LabelProject {
 }
 
 export function parseProjectJson(json: string): LabelProject {
+  return parseProjectJsonWithCompatibility(json).project
+}
+
+export function parseProjectJsonWithCompatibility(
+  json: string,
+): ProjectImportResult {
   let value: unknown
   try {
     value = JSON.parse(json)
@@ -506,7 +553,29 @@ export function serializeProject(project: LabelProject): string {
 }
 
 export async function readProjectFile(file: File): Promise<LabelProject> {
+  return (await readProjectFileWithCompatibility(file)).project
+}
+
+export async function readProjectFileWithCompatibility(
+  file: File,
+): Promise<ProjectImportResult> {
   if (file.size > MAX_PROJECT_FILE_BYTES)
     throw new ProjectFileError('Project files must be smaller than 5 MB.')
-  return parseProjectJson(await file.text())
+  let json: string
+  try {
+    json = await file.text()
+  } catch {
+    throw new ProjectFileError('The selected project file could not be read.')
+  }
+
+  const imported = parseProjectJsonWithCompatibility(json)
+  if (imported.project.name.trim()) return imported
+
+  const inferredName = inferProjectNameFromFileName(file.name)
+  return inferredName
+    ? {
+        ...imported,
+        project: { ...imported.project, name: inferredName },
+      }
+    : imported
 }

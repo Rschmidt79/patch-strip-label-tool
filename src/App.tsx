@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AppFooter } from './components/AppFooter'
 import { Sidebar } from './components/Sidebar'
@@ -28,14 +28,27 @@ import {
   downloadBytes,
   downloadText,
   openPdfBytesInWindow,
-  safeFileStem,
 } from './lib/download'
-import { planPdfLayout, type PdfLayoutPlan } from './lib/pdf-layout'
+import { planPrintLayout, type PrintLayoutPlan } from './lib/print-layout'
 import {
   ProjectFileError,
-  readProjectFile,
+  readProjectFileWithCompatibility,
   serializeProject,
 } from './lib/project-file'
+import { createProjectFileName } from './lib/project-file-name'
+import { registerProjectFileLaunchHandler } from './lib/file-handling'
+import {
+  listenForAppInstallPrompt,
+  type AppInstallPromptEvent,
+} from './lib/pwa-install'
+import {
+  getPrintPageSettings,
+  readStoredPrintPreferences,
+  resolveInitialPrintPreferences,
+  savePrintPreferences,
+  type PrintPreferences,
+  type StorageLike,
+} from './lib/print-preferences'
 import type {
   CellAppearance,
   GroupHeader,
@@ -49,6 +62,7 @@ import {
   PRINT_SCALING_TITLE,
 } from './config/app-info'
 import { MAX_PROJECT_STRIPS } from './config/content-limits'
+import { PROJECT_FILE_MIME_TYPE } from './config/project-files'
 
 interface CellSelection {
   stripId: string
@@ -67,12 +81,31 @@ interface AppNotice {
 }
 
 interface PageLayoutResult {
-  plan?: PdfLayoutPlan
+  plan?: PrintLayoutPlan
   error?: string
+}
+
+function getBrowserStorage(): StorageLike | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage
+  } catch {
+    return undefined
+  }
 }
 
 export function App() {
   const [project, setProject] = useState<LabelProject>(createProject)
+  const [storedPrintPreferences] = useState(() =>
+    readStoredPrintPreferences(getBrowserStorage()),
+  )
+  const [printPreferences, setPrintPreferences] = useState(() =>
+    resolveInitialPrintPreferences(storedPrintPreferences, project.page),
+  )
+  const printPreferencesSource = useRef<
+    'default' | 'legacy-project' | 'stored' | 'user'
+  >(
+    storedPrintPreferences ? 'stored' : 'default',
+  )
   const [activeStripId, setActiveStripId] = useState<string | undefined>(
     project.strips[0]?.id,
   )
@@ -83,10 +116,19 @@ export function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false)
   const [showCalibrationReminder, setShowCalibrationReminder] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState<
+    AppInstallPromptEvent | undefined
+  >()
   const [pendingDeleteStripId, setPendingDeleteStripId] = useState<string>()
   const [busyAction, setBusyAction] = useState<
     'pdf' | 'print' | 'calibration'
   >()
+
+  useEffect(() => {
+    savePrintPreferences(getBrowserStorage(), printPreferences)
+  }, [printPreferences])
+
+  useEffect(() => listenForAppInstallPrompt(window, setInstallPrompt), [])
 
   const activeStrip = useMemo(
     () => project.strips.find((strip) => strip.id === activeStripId),
@@ -149,7 +191,7 @@ export function App() {
   const pageLayout = useMemo<PageLayoutResult>(() => {
     if (project.strips.length === 0) return {}
     try {
-      return { plan: planPdfLayout(project) }
+      return { plan: planPrintLayout(project, printPreferences) }
     } catch (error) {
       return {
         error:
@@ -158,16 +200,21 @@ export function App() {
             : 'The page layout could not be calculated.',
       }
     }
-  }, [project])
+  }, [printPreferences, project])
   const feedbackHref = useMemo(
     () =>
       createFeedbackMailto({
         browser: window.navigator.userAgent,
-        pageFormat: project.page.size,
-        orientation: project.page.orientation,
+        pageFormat: printPreferences.paperSize,
+        orientation: printPreferences.orientation,
       }),
-    [project.page.orientation, project.page.size],
+    [printPreferences.orientation, printPreferences.paperSize],
   )
+
+  function handlePrintPreferencesChange(preferences: PrintPreferences) {
+    printPreferencesSource.current = 'user'
+    setPrintPreferences(preferences)
+  }
 
   function updateProject(updater: (current: LabelProject) => LabelProject) {
     setProject((current) => ({
@@ -215,38 +262,80 @@ export function App() {
   }
 
   function handleSaveProject() {
-    const fileName = `${safeFileStem(project.name)}.patch-labels.json`
+    const fileName = createProjectFileName(project.name)
     downloadText(
       serializeProject(project),
       fileName,
-      'application/json;charset=utf-8',
+      PROJECT_FILE_MIME_TYPE,
     )
     setNotice({ kind: 'success', message: `Saved ${fileName}` })
   }
 
-  async function handleOpenProject(file: File) {
-    try {
-      const importedProject = await readProjectFile(file)
-      if (
-        !window.confirm(
-          `Open “${importedProject.name || 'Untitled project'}”? Unsaved editor changes will be lost.`,
-        )
-      ) {
-        return
-      }
+  const loadProjectFileIntoEditor = useCallback(
+    async (file: File, confirmReplacement: boolean) => {
+      try {
+        const imported = await readProjectFileWithCompatibility(file)
+        const importedProject = imported.project
+        if (
+          confirmReplacement &&
+          !window.confirm(
+            `Open “${importedProject.name || 'Untitled project'}”? Unsaved editor changes will be lost.`,
+          )
+        ) {
+          return
+        }
 
-      setProject(importedProject)
-      setActiveStripId(importedProject.strips[0]?.id)
-      clearSelection()
-      setNotice({ kind: 'success', message: `Opened ${file.name}` })
-    } catch (error) {
+        setProject(importedProject)
+        if (printPreferencesSource.current === 'default') {
+          printPreferencesSource.current = 'legacy-project'
+          setPrintPreferences(
+            resolveInitialPrintPreferences(
+              undefined,
+              imported.legacyPrintSettings,
+            ),
+          )
+        }
+        setActiveStripId(importedProject.strips[0]?.id)
+        setSelection(undefined)
+        setEditingCellId(undefined)
+        setNotice({ kind: 'success', message: `Opened ${file.name}` })
+      } catch (error) {
+        setNotice({
+          kind: 'error',
+          message:
+            error instanceof ProjectFileError
+              ? error.message
+              : 'The project could not be opened.',
+        })
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    registerProjectFileLaunchHandler(window, {
+      onFile: (file) => loadProjectFileIntoEditor(file, false),
+      onError: (error) =>
+        setNotice({
+          kind: 'error',
+          message:
+            error.message || 'The launched project file could not be read.',
+        }),
+    })
+  }, [loadProjectFileIntoEditor])
+
+  async function handleInstallApp() {
+    if (!installPrompt) return
+    try {
+      await installPrompt.prompt()
+      await installPrompt.userChoice
+    } catch {
       setNotice({
         kind: 'error',
-        message:
-          error instanceof ProjectFileError
-            ? error.message
-            : 'The project could not be opened.',
+        message: 'The app installation prompt could not be opened.',
       })
+    } finally {
+      setInstallPrompt(undefined)
     }
   }
 
@@ -255,7 +344,11 @@ export function App() {
     setNotice(undefined)
     try {
       const { createLabelsPdf } = await import('./lib/pdf-export')
-      const bytes = await createLabelsPdf(project)
+      const bytes = await createLabelsPdf(
+        project,
+        printPreferences,
+        pageLayout.plan,
+      )
       const fileName = createLabelsPdfFileName(project.name)
       downloadBytes(bytes, fileName, 'application/pdf')
       setNotice({ kind: 'success', message: `Created ${fileName} without scaling.` })
@@ -286,7 +379,11 @@ export function App() {
     setNotice(undefined)
     try {
       const { createLabelsPdf } = await import('./lib/pdf-export')
-      const bytes = await createLabelsPdf(project)
+      const bytes = await createLabelsPdf(
+        project,
+        printPreferences,
+        pageLayout.plan,
+      )
       openPdfBytesInWindow(bytes, printWindow)
       setNotice({
         kind: 'success',
@@ -310,8 +407,9 @@ export function App() {
     setNotice(undefined)
     try {
       const { createCalibrationPdf } = await import('./lib/pdf-export')
-      const bytes = await createCalibrationPdf(project.page)
-      const fileName = `patch-strip-calibration-${project.page.size.toLowerCase()}-${project.page.orientation}.pdf`
+      const printPage = getPrintPageSettings(printPreferences)
+      const bytes = await createCalibrationPdf(printPage)
+      const fileName = `patch-strip-calibration-${printPage.size.toLowerCase()}-${printPage.orientation}.pdf`
       downloadBytes(bytes, fileName, 'application/pdf')
       setNotice({
         kind: 'success',
@@ -580,7 +678,7 @@ export function App() {
           updateProject((current) => ({ ...current, name }))
         }
         onNewProject={handleNewProject}
-        onOpenProject={handleOpenProject}
+        onOpenProject={(file) => loadProjectFileIntoEditor(file, true)}
         onSaveProject={handleSaveProject}
         onPrintPdf={() => setShowPrintReminder(true)}
         onExportPdf={handleExportPdf}
@@ -712,16 +810,12 @@ export function App() {
       )}
       <div className="app-body">
         <Sidebar
-          page={project.page}
           activeStrip={activeStrip}
           selectedCell={selectedCell}
           selectedCellCount={resolvedSelection?.cellIds.length ?? 0}
           selectedRangeLabel={selectedRangeLabel}
           selectedRange={resolvedSelection}
           selectedGroupHeader={selectedGroupHeader}
-          onPageChange={(page) =>
-            updateProject((current) => ({ ...current, page }))
-          }
           onUpdateStrip={(updater) => {
             if (activeStripId) updateStrip(activeStripId, updater)
           }}
@@ -741,6 +835,7 @@ export function App() {
         <Workspace
           project={project}
           strips={project.strips}
+          printPreferences={printPreferences}
           pageLayoutPlan={pageLayout.plan}
           pageLayoutError={pageLayout.error}
           activeStripId={activeStripId}
@@ -749,6 +844,7 @@ export function App() {
           selectionLabel={selectedRangeLabel}
           previewScale={previewScale}
           onPreviewScaleChange={setPreviewScale}
+          onPrintPreferencesChange={handlePrintPreferencesChange}
           onActivateStrip={(stripId) => {
             if (stripId !== activeStripId) {
               setActiveStripId(stripId)
@@ -780,7 +876,13 @@ export function App() {
         feedbackHref={feedbackHref}
         onOpenHelp={() => setShowAbout(true)}
       />
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
+      {showAbout && (
+        <AboutDialog
+          installPromptAvailable={installPrompt !== undefined}
+          onInstallApp={handleInstallApp}
+          onClose={() => setShowAbout(false)}
+        />
+      )}
     </div>
   )
 }
