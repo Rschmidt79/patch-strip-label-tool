@@ -89,6 +89,58 @@ describe('PDF layout and generation', () => {
     expect(pageSize.height).toBeCloseTo(millimetersToPoints(210), 10)
   })
 
+  it.each([
+    ['Letter', 215.9, 279.4],
+    ['Legal', 215.9, 355.6],
+    ['Tabloid', 279.4, 431.8],
+  ] as const)(
+    'packs strips on the exact %s portrait page size',
+    (size, widthMm, heightMm) => {
+      const project = createProject()
+      project.page = { size, orientation: 'portrait' }
+      project.strips = [createStrip('Compact strip', 100, 7.5, 4)]
+
+      const plan = planPdfLayout(project)
+
+      expect(plan.pageWidthMm).toBe(widthMm)
+      expect(plan.pageHeightMm).toBe(heightMm)
+      expect(plan.placements).toHaveLength(1)
+      expect(plan.placements[0].widthMm).toBe(100)
+    },
+  )
+
+  it('creates an exact US Letter portrait PDF page', async () => {
+    const project = createProject()
+    project.page = { size: 'Letter', orientation: 'portrait' }
+    project.strips = [createStrip('Compact strip', 100, 7.5, 4)]
+
+    const bytes = await createLabelsPdf(project)
+    const pdf = await PDFDocument.load(bytes)
+    const pageSize = pdf.getPage(0).getSize()
+
+    expect(pageSize.width).toBeCloseTo(millimetersToPoints(215.9), 10)
+    expect(pageSize.height).toBeCloseTo(millimetersToPoints(279.4), 10)
+  })
+
+  it('fits a long rack strip and creates an exact US Tabloid landscape PDF page', async () => {
+    const project = createProject()
+    project.page = { size: 'Tabloid', orientation: 'landscape' }
+    project.strips = [createStrip('Long strip', 432, 7.5, 12)]
+
+    const plan = planPdfLayout(project)
+    expect(plan.placements).toHaveLength(1)
+    expect(plan.placements[0].widthMm).toBe(432)
+    expect(plan.placements[0].rotationDegrees).toBeGreaterThan(0)
+    expect(plan.placements[0].rotationDegrees).toBeLessThan(90)
+
+    const bytes = await createLabelsPdf(project)
+    const pdf = await PDFDocument.load(bytes)
+    const pageSize = pdf.getPage(0).getSize()
+
+    expect(pageSize.width).toBeCloseTo(millimetersToPoints(431.8), 10)
+    expect(pageSize.height).toBeCloseTo(millimetersToPoints(279.4), 10)
+  })
+
   it('fits a 432 mm strip diagonally on A3 landscape without scaling', async () => {
     const project = createProject()
     project.page = { size: 'A3', orientation: 'landscape' }

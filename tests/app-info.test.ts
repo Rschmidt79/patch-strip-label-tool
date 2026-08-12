@@ -39,6 +39,19 @@ describe('beta application information', () => {
     expect(SUPPORT_URL).toBe('https://buymeacoffee.com/rschmidt')
   })
 
+  it('uses the clear US paper display name in feedback diagnostics', () => {
+    const href = createFeedbackMailto({
+      browser: 'Beta Browser 1.0',
+      pageFormat: 'Letter',
+      orientation: 'portrait',
+    })
+    const parameters = new URLSearchParams(href.slice(href.indexOf('?') + 1))
+
+    expect(parameters.get('body')).toContain(
+      'Page format: US Letter (8.5 × 11 in)',
+    )
+  })
+
   it('encodes and flattens hostile diagnostic values without adding headers', () => {
     const href = createFeedbackMailto({
       browser: 'Browser\r\nBcc: attacker@example.test&subject=override',

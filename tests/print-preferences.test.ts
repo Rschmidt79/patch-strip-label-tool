@@ -51,6 +51,20 @@ describe('local print preferences', () => {
     expect(readStoredPrintPreferences(storage)).toEqual(preferences)
   })
 
+  it.each(['Letter', 'Legal', 'Tabloid'] as const)(
+    'persists the %s paper size in local print preferences',
+    (paperSize) => {
+      const storage = createMemoryStorage()
+      const preferences = {
+        ...DEFAULT_PRINT_PREFERENCES,
+        paperSize,
+      }
+
+      expect(savePrintPreferences(storage, preferences)).toBe(true)
+      expect(readStoredPrintPreferences(storage)).toEqual(preferences)
+    },
+  )
+
   it('ignores malformed storage without throwing', () => {
     const storage = createMemoryStorage()
     storage.values.set(PRINT_PREFERENCES_STORAGE_KEY, '{bad json')

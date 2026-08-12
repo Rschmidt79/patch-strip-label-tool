@@ -32,6 +32,16 @@ describe('project JSON files', () => {
     expect(serializeProject(project)).not.toContain('stripGapMm')
   })
 
+  it('accepts a US page size without changing the project schema version', () => {
+    const project = createProject()
+    project.page = { size: 'Tabloid', orientation: 'landscape' }
+
+    const imported = parseProjectJson(serializeProject(project))
+
+    expect(imported.page).toEqual(project.page)
+    expect(imported.schemaVersion).toBe(3)
+  })
+
   it('migrates version 2 header projects to fixed-height internal bands', () => {
     const project = createProject()
     project.strips[0] = addGroupHeader(

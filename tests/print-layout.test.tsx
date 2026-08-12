@@ -12,6 +12,10 @@ import { createLabelsPdf } from '../src/lib/pdf-export'
 import { planPrintLayout } from '../src/lib/print-layout'
 import { DEFAULT_PRINT_PREFERENCES } from '../src/lib/print-preferences'
 import { createProject, createStrip } from '../src/model/defaults'
+import {
+  getPageSizeDisplayName,
+  PAGE_SIZE_IDS,
+} from '../src/config/pages'
 
 function getDecodedPageContent(pdf: PDFDocument, pageIndex: number): string {
   const contents = pdf.getPage(pageIndex).node.Contents()
@@ -32,6 +36,24 @@ function getDecodedPageContent(pdf: PDFDocument, pageIndex: number): string {
 }
 
 describe('shared print layout plan', () => {
+  it('offers every registered paper size in the page selector', () => {
+    const project = createProject()
+    const markup = renderToStaticMarkup(
+      <PageLayoutPreview
+        project={project}
+        preferences={DEFAULT_PRINT_PREFERENCES}
+        plan={undefined}
+        error={undefined}
+        onPreferencesChange={() => undefined}
+      />,
+    )
+
+    for (const size of PAGE_SIZE_IDS) {
+      expect(markup).toContain(`value="${size}"`)
+      expect(markup).toContain(getPageSizeDisplayName(size))
+    }
+  })
+
   it('drives preview and PDF cut guides from the same geometry', async () => {
     const project = createProject()
     project.strips = [

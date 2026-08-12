@@ -5,17 +5,53 @@ export interface PageDimensionsMm {
   heightMm: number
 }
 
-const PORTRAIT_PAGE_SIZES_MM: Record<PageSize, PageDimensionsMm> = {
-  A4: { widthMm: 210, heightMm: 297 },
-  A3: { widthMm: 297, heightMm: 420 },
+export interface PageSizeDefinition extends PageDimensionsMm {
+  displayName: string
+}
+
+export const PAGE_SIZE_DEFINITIONS: Readonly<
+  Record<PageSize, PageSizeDefinition>
+> = {
+  A4: { displayName: 'A4', widthMm: 210, heightMm: 297 },
+  A3: { displayName: 'A3', widthMm: 297, heightMm: 420 },
+  Letter: {
+    displayName: 'US Letter (8.5 × 11 in)',
+    widthMm: 215.9,
+    heightMm: 279.4,
+  },
+  Legal: {
+    displayName: 'US Legal (8.5 × 14 in)',
+    widthMm: 215.9,
+    heightMm: 355.6,
+  },
+  Tabloid: {
+    displayName: 'US Tabloid (11 × 17 in)',
+    widthMm: 279.4,
+    heightMm: 431.8,
+  },
+}
+
+export const PAGE_SIZE_IDS = Object.freeze(
+  Object.keys(PAGE_SIZE_DEFINITIONS) as PageSize[],
+)
+
+export function isPageSize(value: unknown): value is PageSize {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(PAGE_SIZE_DEFINITIONS, value)
+  )
+}
+
+export function getPageSizeDisplayName(size: PageSize): string {
+  return PAGE_SIZE_DEFINITIONS[size].displayName
 }
 
 export function getPageDimensionsMm(
   page: PageSettings,
 ): PageDimensionsMm {
-  const portrait = PORTRAIT_PAGE_SIZES_MM[page.size]
+  const portrait = PAGE_SIZE_DEFINITIONS[page.size]
   return page.orientation === 'portrait'
-    ? { ...portrait }
+    ? { widthMm: portrait.widthMm, heightMm: portrait.heightMm }
     : { widthMm: portrait.heightMm, heightMm: portrait.widthMm }
 }
 
@@ -23,5 +59,5 @@ export function formatPageDescription(
   size: PageSize,
   orientation: PageOrientation,
 ): string {
-  return `${size} ${orientation}`
+  return `${getPageSizeDisplayName(size)} ${orientation}`
 }
