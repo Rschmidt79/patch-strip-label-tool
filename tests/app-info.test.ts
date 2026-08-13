@@ -6,10 +6,11 @@ import {
   FEEDBACK_EMAIL_ADDRESS,
   SUPPORT_URL,
 } from '../src/config/app-info'
+import packageMetadata from '../package.json'
 
 describe('beta application information', () => {
   it('exposes package version and a build-injected ISO date', () => {
-    expect(APP_VERSION).toBe('0.6.0-beta')
+    expect(APP_VERSION).toBe(packageMetadata.version)
     expect(BUILD_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 

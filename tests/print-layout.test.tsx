@@ -10,6 +10,10 @@ import { PageLayoutPreview } from '../src/components/PageLayoutPreview'
 import { millimetersToPoints } from '../src/lib/dimensions'
 import { createLabelsPdf } from '../src/lib/pdf-export'
 import { planPrintLayout } from '../src/lib/print-layout'
+import {
+  CROP_MARK_LENGTH_MM,
+  CROP_MARK_OFFSET_MM,
+} from '../src/lib/cut-guides'
 import { DEFAULT_PRINT_PREFERENCES } from '../src/lib/print-preferences'
 import { createProject, createStrip } from '../src/model/defaults'
 import {
@@ -51,6 +55,33 @@ describe('shared print layout plan', () => {
     for (const size of PAGE_SIZE_IDS) {
       expect(markup).toContain(`value="${size}"`)
       expect(markup).toContain(getPageSizeDisplayName(size))
+    }
+  })
+
+  it('keeps the 432 mm SRA3 strip horizontal with crop marks inside the page', () => {
+    const project = createProject()
+    project.strips = [createStrip('Full rack strip', 432, 7.5, 12)]
+    const plan = planPrintLayout(project, {
+      ...DEFAULT_PRINT_PREFERENCES,
+      paperSize: 'SRA3',
+      orientation: 'landscape',
+    })
+
+    expect(plan.placements[0].rotationDegrees).toBe(0)
+    expect(plan.pageMarginsMm.leftMm).toBeGreaterThan(
+      CROP_MARK_OFFSET_MM + CROP_MARK_LENGTH_MM,
+    )
+    expect(plan.pageMarginsMm.rightMm).toBeGreaterThan(
+      CROP_MARK_OFFSET_MM + CROP_MARK_LENGTH_MM,
+    )
+
+    for (const mark of plan.pageGuides[0].cropMarks) {
+      for (const point of [mark.start, mark.end]) {
+        expect(point.xMm).toBeGreaterThanOrEqual(0)
+        expect(point.xMm).toBeLessThanOrEqual(plan.pageWidthMm)
+        expect(point.yMm).toBeGreaterThanOrEqual(0)
+        expect(point.yMm).toBeLessThanOrEqual(plan.pageHeightMm)
+      }
     }
   })
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AppFooter } from './components/AppFooter'
+import { MobileScreenNotice } from './components/MobileScreenNotice'
 import { Sidebar } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
 import { Workspace } from './components/Workspace'
@@ -116,6 +117,7 @@ export function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false)
   const [showCalibrationReminder, setShowCalibrationReminder] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showMobileScreenNotice, setShowMobileScreenNotice] = useState(true)
   const [installPrompt, setInstallPrompt] = useState<
     AppInstallPromptEvent | undefined
   >()
@@ -672,6 +674,11 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {showMobileScreenNotice && (
+        <MobileScreenNotice
+          onContinue={() => setShowMobileScreenNotice(false)}
+        />
+      )}
       <Toolbar
         projectName={project.name}
         onProjectNameChange={(name) =>

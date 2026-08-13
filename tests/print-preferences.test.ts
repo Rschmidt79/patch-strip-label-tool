@@ -51,7 +51,7 @@ describe('local print preferences', () => {
     expect(readStoredPrintPreferences(storage)).toEqual(preferences)
   })
 
-  it.each(['Letter', 'Legal', 'Tabloid'] as const)(
+  it.each(['SRA3', 'Letter', 'Legal', 'Tabloid'] as const)(
     'persists the %s paper size in local print preferences',
     (paperSize) => {
       const storage = createMemoryStorage()

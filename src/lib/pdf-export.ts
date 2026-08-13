@@ -12,7 +12,11 @@ import {
   StandardFonts,
 } from 'pdf-lib'
 import supportQrDataUrl from '../assets/bmc_qr.png?inline'
-import { getPageDimensionsMm } from '../config/pages'
+import {
+  getPageDimensionsMm,
+  getPageLayoutMarginsMm,
+  type PageLayoutMarginsMm,
+} from '../config/pages'
 import {
   getCellWidthMm,
   millimetersToPoints,
@@ -22,10 +26,7 @@ import {
   getCellContentGeometryMm,
   getGroupHeaderGeometryMm,
 } from './group-headers'
-import {
-  PDF_MARGIN_MM,
-  type PdfStripPlacement,
-} from './pdf-layout'
+import type { PdfStripPlacement } from './pdf-layout'
 import {
   CROP_MARK_WIDTH_MM,
   CUT_LINE_WIDTH_MM,
@@ -166,18 +167,19 @@ export function getCalibrationOutlineGeometryMm(
 function drawPrintNotice(
   page: PDFPage,
   pageHeightMm: number,
+  pageMarginsMm: Readonly<PageLayoutMarginsMm>,
   font: PDFFont,
 ): void {
   page.drawText(PRINT_NOTICE_LINE_1, {
-    x: millimetersToPoints(PDF_MARGIN_MM),
-    y: millimetersToPoints(pageHeightMm - PDF_MARGIN_MM - 2.5),
+    x: millimetersToPoints(pageMarginsMm.leftMm),
+    y: millimetersToPoints(pageHeightMm - pageMarginsMm.topMm - 2.5),
     size: 7,
     font,
     color: grayscale(0.15),
   })
   page.drawText(PRINT_NOTICE_LINE_2, {
-    x: millimetersToPoints(PDF_MARGIN_MM),
-    y: millimetersToPoints(pageHeightMm - PDF_MARGIN_MM - 6),
+    x: millimetersToPoints(pageMarginsMm.leftMm),
+    y: millimetersToPoints(pageHeightMm - pageMarginsMm.topMm - 6),
     size: 7,
     font,
     color: grayscale(0.15),
@@ -522,7 +524,7 @@ export async function createLabelsPdf(
       millimetersToPoints(plan.pageWidthMm),
       millimetersToPoints(plan.pageHeightMm),
     ])
-    drawPrintNotice(page, plan.pageHeightMm, boldFont)
+    drawPrintNotice(page, plan.pageHeightMm, plan.pageMarginsMm, boldFont)
     const supportGeometry = supportGeometries[pageIndex]
     if (supportGeometry && supportQrImage) {
       drawSupportQrDecoration(
@@ -625,7 +627,12 @@ export async function createCalibrationPdf(
   ])
   const regularFont = await pdf.embedFont(StandardFonts.Helvetica)
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
-  drawPrintNotice(page, heightMm, boldFont)
+  drawPrintNotice(
+    page,
+    heightMm,
+    getPageLayoutMarginsMm(pageSettings),
+    boldFont,
+  )
 
   const squareGeometry = getCalibrationSquareGeometryMm(pageSettings)
   const outlineGeometry = getCalibrationOutlineGeometryMm(pageSettings)

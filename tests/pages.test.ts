@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getPageLayoutMarginsMm,
   getPageDimensionsMm,
   getPageSizeDisplayName,
 } from '../src/config/pages'
@@ -32,6 +33,25 @@ const US_PAGE_SIZES = [
 }>
 
 describe('paper sizes', () => {
+  it('defines exact SRA3 dimensions in both orientations', () => {
+    expect(getPageSizeDisplayName('SRA3')).toBe('SRA3')
+    expect(
+      getPageDimensionsMm({ size: 'SRA3', orientation: 'portrait' }),
+    ).toEqual({ widthMm: 320, heightMm: 450 })
+    expect(
+      getPageDimensionsMm({ size: 'SRA3', orientation: 'landscape' }),
+    ).toEqual({ widthMm: 450, heightMm: 320 })
+  })
+
+  it('uses paper-specific SRA3 side margins and keeps other margins unchanged', () => {
+    expect(
+      getPageLayoutMarginsMm({ size: 'SRA3', orientation: 'landscape' }),
+    ).toEqual({ leftMm: 9, rightMm: 9, topMm: 10, bottomMm: 10 })
+    expect(
+      getPageLayoutMarginsMm({ size: 'A3', orientation: 'landscape' }),
+    ).toEqual({ leftMm: 10, rightMm: 10, topMm: 10, bottomMm: 10 })
+  })
+
   it.each(US_PAGE_SIZES)(
     'defines exact $displayName portrait dimensions in millimeters',
     ({ size, displayName, widthMm, heightMm }) => {

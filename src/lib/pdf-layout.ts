@@ -1,4 +1,9 @@
-import { formatPageDescription, getPageDimensionsMm } from '../config/pages'
+import {
+  formatPageDescription,
+  getPageDimensionsMm,
+  getPageLayoutMarginsMm,
+  type PageLayoutMarginsMm,
+} from '../config/pages'
 import type {
   LabelProject,
   LabelStrip,
@@ -22,7 +27,6 @@ import {
   type RectMm,
 } from './geometry'
 
-export const PDF_MARGIN_MM = 10
 export const PDF_NOTICE_RESERVE_MM = 10
 export const DEFAULT_PDF_STRIP_GAP_MM = 0
 /** Compatibility name for callers that use the default gap. */
@@ -59,6 +63,7 @@ export interface PdfLayoutPlan {
   pageHeightMm: number
   pageCount: number
   stripGapMm: number
+  pageMarginsMm: Readonly<PageLayoutMarginsMm>
   usableArea: RectMm
   placements: PdfStripPlacement[]
 }
@@ -738,12 +743,17 @@ export function planPdfLayout(
 
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } =
     getPageDimensionsMm(pageSettings)
+  const pageMarginsMm = getPageLayoutMarginsMm(pageSettings)
   const usableArea: RectMm = {
-    xMm: PDF_MARGIN_MM,
-    yMm: PDF_MARGIN_MM,
-    widthMm: pageWidthMm - PDF_MARGIN_MM * 2,
+    xMm: pageMarginsMm.leftMm,
+    yMm: pageMarginsMm.bottomMm,
+    widthMm:
+      pageWidthMm - pageMarginsMm.leftMm - pageMarginsMm.rightMm,
     heightMm:
-      pageHeightMm - PDF_MARGIN_MM * 2 - PDF_NOTICE_RESERVE_MM,
+      pageHeightMm -
+      pageMarginsMm.topMm -
+      pageMarginsMm.bottomMm -
+      PDF_NOTICE_RESERVE_MM,
   }
   const orientationsByStrip = new Map(
     project.strips.map((strip) => [
@@ -855,6 +865,7 @@ export function planPdfLayout(
     pageHeightMm,
     pageCount: pages.length,
     stripGapMm,
+    pageMarginsMm,
     usableArea,
     placements,
   }
