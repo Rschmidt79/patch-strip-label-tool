@@ -32,9 +32,9 @@ describe('project JSON files', () => {
     expect(serializeProject(project)).not.toContain('stripGapMm')
   })
 
-  it('accepts a US page size without changing the project schema version', () => {
+  it('accepts SRA3 without changing the project schema version', () => {
     const project = createProject()
-    project.page = { size: 'Tabloid', orientation: 'landscape' }
+    project.page = { size: 'SRA3', orientation: 'landscape' }
 
     const imported = parseProjectJson(serializeProject(project))
 

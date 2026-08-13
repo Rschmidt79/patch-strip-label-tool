@@ -90,6 +90,7 @@ describe('PDF layout and generation', () => {
   })
 
   it.each([
+    ['SRA3', 320, 450],
     ['Letter', 215.9, 279.4],
     ['Legal', 215.9, 355.6],
     ['Tabloid', 279.4, 431.8],
@@ -108,6 +109,45 @@ describe('PDF layout and generation', () => {
       expect(plan.placements[0].widthMm).toBe(100)
     },
   )
+
+  it('creates exact SRA3 landscape output and keeps the 432 mm rack preset horizontal', async () => {
+    const project = createProject()
+    project.page = { size: 'SRA3', orientation: 'landscape' }
+    project.strips = [createStrip('Full rack strip', 432, 7.5, 12)]
+
+    const plan = planPdfLayout(project)
+    expect(plan.pageWidthMm).toBe(450)
+    expect(plan.pageHeightMm).toBe(320)
+    expect(plan.pageMarginsMm).toEqual({
+      leftMm: 9,
+      rightMm: 9,
+      topMm: 10,
+      bottomMm: 10,
+    })
+    expect(plan.usableArea.widthMm).toBe(432)
+    expect(plan.placements[0]).toMatchObject({
+      xMm: 9,
+      widthMm: 432,
+      heightMm: 7.5,
+      rotationDegrees: 0,
+    })
+
+    const bytes = await createLabelsPdf(project)
+    const pdf = await PDFDocument.load(bytes)
+    const pageSize = pdf.getPage(0).getSize()
+    expect(pageSize.width).toBeCloseTo(millimetersToPoints(450), 10)
+    expect(pageSize.height).toBeCloseTo(millimetersToPoints(320), 10)
+  })
+
+  it('uses vertical SRA3 placement before considering a diagonal fit', () => {
+    const project = createProject()
+    project.page = { size: 'SRA3', orientation: 'portrait' }
+    project.strips = [createStrip('Tall rack strip', 400, 7.5, 12)]
+
+    const plan = planPdfLayout(project)
+
+    expect(plan.placements[0].rotationDegrees).toBe(90)
+  })
 
   it('creates an exact US Letter portrait PDF page', async () => {
     const project = createProject()

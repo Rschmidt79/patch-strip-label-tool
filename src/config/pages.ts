@@ -5,8 +5,24 @@ export interface PageDimensionsMm {
   heightMm: number
 }
 
+export interface PageLayoutMarginsMm {
+  leftMm: number
+  rightMm: number
+  topMm: number
+  bottomMm: number
+}
+
 export interface PageSizeDefinition extends PageDimensionsMm {
   displayName: string
+  /** Placement margins applied after page orientation is resolved. */
+  layoutMarginsMm?: PageLayoutMarginsMm
+}
+
+export const DEFAULT_PAGE_LAYOUT_MARGINS_MM: Readonly<PageLayoutMarginsMm> = {
+  leftMm: 10,
+  rightMm: 10,
+  topMm: 10,
+  bottomMm: 10,
 }
 
 export const PAGE_SIZE_DEFINITIONS: Readonly<
@@ -14,6 +30,17 @@ export const PAGE_SIZE_DEFINITIONS: Readonly<
 > = {
   A4: { displayName: 'A4', widthMm: 210, heightMm: 297 },
   A3: { displayName: 'A3', widthMm: 297, heightMm: 420 },
+  SRA3: {
+    displayName: 'SRA3',
+    widthMm: 320,
+    heightMm: 450,
+    layoutMarginsMm: {
+      leftMm: 9,
+      rightMm: 9,
+      topMm: 10,
+      bottomMm: 10,
+    },
+  },
   Letter: {
     displayName: 'US Letter (8.5 × 11 in)',
     widthMm: 215.9,
@@ -44,6 +71,15 @@ export function isPageSize(value: unknown): value is PageSize {
 
 export function getPageSizeDisplayName(size: PageSize): string {
   return PAGE_SIZE_DEFINITIONS[size].displayName
+}
+
+export function getPageLayoutMarginsMm(
+  page: PageSettings,
+): Readonly<PageLayoutMarginsMm> {
+  return (
+    PAGE_SIZE_DEFINITIONS[page.size].layoutMarginsMm ??
+    DEFAULT_PAGE_LAYOUT_MARGINS_MM
+  )
 }
 
 export function getPageDimensionsMm(

@@ -5,6 +5,17 @@ const webdriverUrl = process.argv[2] ?? 'http://127.0.0.1:4444'
 const appUrl = process.argv[3] ?? 'http://127.0.0.1:4173'
 const downloadDirectory = path.resolve(process.argv[4] ?? '/tmp')
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf'
+const packageMetadata = JSON.parse(
+  await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+)
+const expectedAppVersion = packageMetadata.version
+const escapedAppVersion = expectedAppVersion.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  '\\$&',
+)
+const versionBuildPattern = new RegExp(
+  `^v${escapedAppVersion} · Build \\d{4}-\\d{2}-\\d{2}$`,
+)
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
@@ -182,7 +193,7 @@ try {
   assert(betaUi.title === 'Rack Label Maker', 'Production HTML title is incorrect')
   assert(betaUi.description?.includes('true-size rack'), 'Production meta description is missing')
   assert(betaUi.beta === 'Beta', 'Beta indicator is missing')
-  assert(/^v0\.6\.0-beta · Build \d{4}-\d{2}-\d{2}$/.test(betaUi.version), 'Version/build footer is incorrect')
+  assert(versionBuildPattern.test(betaUi.version), 'Version/build footer is incorrect')
 
   const emptyDefaults = await execute(
     `return { cells: [...document.querySelectorAll('.strip-card:first-of-type .svg-cell')].map((cell) => cell.getAttribute('aria-label')), line1Template: document.querySelector('input[aria-label="Line 1 template"]')?.value, line2Template: document.querySelector('input[aria-label="Line 2 template"]')?.value };`,
@@ -442,7 +453,7 @@ try {
   }
   assert(aboutState.supportHref === 'https://buymeacoffee.com/rschmidt', 'Help support URL is incorrect')
   assert(aboutState.supportTarget === '_blank' && aboutState.supportRel === 'noopener noreferrer', 'Help support link safety attributes are missing')
-  assert(/^v0\.6\.0-beta · Build \d{4}-\d{2}-\d{2}$/.test(aboutState.version), 'Help version/build information is incorrect')
+  assert(versionBuildPattern.test(aboutState.version), 'Help version/build information is incorrect')
   const aboutScreenshotFile = path.join(downloadDirectory, 'help-about.png')
   const aboutScreenshot = await request(`/session/${sessionId}/screenshot`)
   await writeFile(aboutScreenshotFile, Buffer.from(aboutScreenshot, 'base64'))
@@ -456,7 +467,7 @@ try {
     `const footer = document.querySelector('.app-footer'); const feedback = [...(footer?.querySelectorAll('a') ?? [])].find((item) => item.textContent.trim() === 'Send feedback'); const support = [...(footer?.querySelectorAll('a') ?? [])].find((item) => item.textContent.includes('Buy me a coffee')); const feedbackUrl = feedback ? new URL(feedback.href) : undefined; const body = feedbackUrl ? new URLSearchParams(feedbackUrl.search).get('body') : ''; return { feedbackHref: feedback?.getAttribute('href'), feedbackBody: body, supportHref: support?.getAttribute('href'), supportTarget: support?.getAttribute('target'), supportRel: support?.getAttribute('rel') };`,
   )
   assert(footerActions.feedbackHref?.startsWith('mailto:'), 'Feedback action is not a mailto link')
-  for (const expected of ['Version: v0.6.0-beta', 'Build:', 'Browser:', 'Page format: A3', 'Orientation: landscape', 'Feedback:', '[write here]']) {
+  for (const expected of [`Version: v${expectedAppVersion}`, 'Build:', 'Browser:', 'Page format: A3', 'Orientation: landscape', 'Feedback:', '[write here]']) {
     assert(footerActions.feedbackBody.includes(expected), `Feedback draft is missing: ${expected}`)
   }
   for (const privateValue of ['Studio Rack Labels', 'Router Out', 'Wireless', 'MICROPHONES', '<script>', 'constructor.constructor']) {
