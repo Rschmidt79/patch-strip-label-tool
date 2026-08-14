@@ -6,6 +6,8 @@ import {
   insertNumberPlaceholder,
 } from '../lib/auto-numbering'
 import { CELL_COLOR_PRESETS } from '../lib/cell-style'
+import { getContrastingTextColor } from '../lib/colors'
+import { DEFAULT_GROUP_HEADER_STYLE } from '../model/defaults'
 import type { CellRange } from '../lib/cell-range'
 import {
   formatMillimeters,
@@ -18,17 +20,20 @@ import type {
   GroupHeader,
   LabelCell,
   LabelStrip,
+  LabelStripRow,
   TextAlignment,
 } from '../model/project'
 
 interface SidebarProps {
   activeStrip: LabelStrip | undefined
+  activeRow: LabelStripRow | undefined
+  activeRowIndex: number
   selectedCell: LabelCell | undefined
   selectedCellCount: number
   selectedRangeLabel: string | undefined
   selectedRange: CellRange | undefined
   selectedGroupHeader: GroupHeader | undefined
-  onUpdateStrip: (updater: (strip: LabelStrip) => LabelStrip) => void
+  onUpdateRow: (updater: (row: LabelStripRow) => LabelStripRow) => void
   onUpdateCell: (updater: (cell: LabelCell) => LabelCell) => void
   onAddGroupHeader: (text: string) => void
   onUpdateSelectedGroupHeader: (
@@ -255,12 +260,14 @@ function AutoNumberTemplateField({
 
 export function Sidebar({
   activeStrip,
+  activeRow,
+  activeRowIndex,
   selectedCell,
   selectedCellCount,
   selectedRangeLabel,
   selectedRange,
   selectedGroupHeader,
-  onUpdateStrip,
+  onUpdateRow,
   onUpdateCell,
   onAddGroupHeader,
   onUpdateSelectedGroupHeader,
@@ -272,27 +279,34 @@ export function Sidebar({
   onApplyAutoNumberingToAll,
   onClearSelectedCells,
 }: SidebarProps) {
-  const matchingPreset = activeStrip
+  const matchingPreset = activeRow
     ? STRIP_PRESETS.find(
         (preset) =>
-          preset.widthMm === activeStrip.dimensions.widthMm &&
-          preset.heightMm === activeStrip.dimensions.heightMm &&
-          preset.cellCount === activeStrip.dimensions.cellCount,
+          preset.widthMm === activeRow.dimensions.widthMm &&
+          preset.heightMm === activeRow.dimensions.heightMm &&
+          preset.cellCount === activeRow.dimensions.cellCount,
       )?.id ?? 'custom'
     : 'custom'
 
-  const cellWidthMm = activeStrip ? getCellWidthMm(activeStrip) : 0
+  const cellWidthMm = activeRow ? getCellWidthMm(activeRow) : 0
   const totalHeightMm = activeStrip ? getStripTotalHeightMm(activeStrip) : 0
   const selectedAppearance =
-    activeStrip && selectedRange
-      ? activeStrip.cells[selectedRange.startIndex]?.appearance
+    activeRow && selectedRange
+      ? activeRow.cells[selectedRange.startIndex]?.appearance
       : undefined
 
   return (
     <aside className="sidebar">
       <section className="sidebar-panel">
-        <PanelTitle title="Strip dimensions" meta="Millimeters" />
-        {activeStrip ? (
+        <PanelTitle
+          title="Row dimensions"
+          meta={
+            activeStrip && activeRow
+              ? `Row ${activeRowIndex + 1} of ${activeStrip.rows.length}`
+              : 'Millimeters'
+          }
+        />
+        {activeRow ? (
           <>
             <label className="field">
               <span>Preset</span>
@@ -309,7 +323,7 @@ export function Sidebar({
                   )
                     return
 
-                  onUpdateStrip((strip) => {
+                  onUpdateRow((strip) => {
                     const resized = resizeStripCells(strip, preset.cellCount!)
                     return {
                       ...resized,
@@ -344,13 +358,13 @@ export function Sidebar({
             <div className="field-row">
               <NumberField
                 label="Width"
-                value={activeStrip.dimensions.widthMm}
+                value={activeRow.dimensions.widthMm}
                 min={10}
                 max={1200}
                 step={0.1}
                 unit="mm"
                 onChange={(widthMm) =>
-                  onUpdateStrip((strip) => ({
+                  onUpdateRow((strip) => ({
                     ...strip,
                     dimensions: {
                       ...strip.dimensions,
@@ -365,13 +379,13 @@ export function Sidebar({
               />
               <NumberField
                 label="Cell row height"
-                value={activeStrip.dimensions.heightMm}
+                value={activeRow.dimensions.heightMm}
                 min={3}
                 max={100}
                 step={0.1}
                 unit="mm"
                 onChange={(heightMm) =>
-                  onUpdateStrip((strip) => ({
+                  onUpdateRow((strip) => ({
                     ...strip,
                     dimensions: {
                       ...strip.dimensions,
@@ -388,12 +402,12 @@ export function Sidebar({
             <div className="field-row">
               <NumberField
                 label="Cells"
-                value={activeStrip.dimensions.cellCount}
+                value={activeRow.dimensions.cellCount}
                 min={1}
                 max={64}
                 step={1}
                 onChange={(cellCount) =>
-                  onUpdateStrip((strip) => resizeStripCells(strip, cellCount))
+                  onUpdateRow((strip) => resizeStripCells(strip, cellCount))
                 }
               />
               <label className="field readonly-field">
@@ -406,13 +420,13 @@ export function Sidebar({
               <summary>Advanced</summary>
               <NumberField
                 label="Internal header band"
-                value={activeStrip.dimensions.groupHeaderBandHeightMm}
+                value={activeRow.dimensions.groupHeaderBandHeightMm}
                 min={0.5}
-                max={Math.max(0.5, activeStrip.dimensions.heightMm - 0.5)}
+                max={Math.max(0.5, activeRow.dimensions.heightMm - 0.5)}
                 step={0.1}
                 unit="mm"
                 onChange={(groupHeaderBandHeightMm) =>
-                  onUpdateStrip((strip) => ({
+                  onUpdateRow((strip) => ({
                     ...strip,
                     dimensions: {
                       ...strip.dimensions,
@@ -428,9 +442,9 @@ export function Sidebar({
                 </span>
                 <input
                   type="checkbox"
-                  checked={activeStrip.dimensions.cellWidthMode === 'custom'}
+                  checked={activeRow.dimensions.cellWidthMode === 'custom'}
                   onChange={(event) =>
-                    onUpdateStrip((strip) => ({
+                    onUpdateRow((strip) => ({
                       ...strip,
                       dimensions: {
                         ...strip.dimensions,
@@ -443,16 +457,16 @@ export function Sidebar({
                   }
                 />
               </label>
-              {activeStrip.dimensions.cellWidthMode === 'custom' && (
+              {activeRow.dimensions.cellWidthMode === 'custom' && (
                 <NumberField
                   label="Custom cell width"
-                  value={activeStrip.dimensions.customCellWidthMm}
+                  value={activeRow.dimensions.customCellWidthMm}
                   min={1}
                   max={250}
                   step={0.1}
                   unit="mm"
                   onChange={(customCellWidthMm) =>
-                    onUpdateStrip((strip) => ({
+                    onUpdateRow((strip) => ({
                       ...strip,
                       dimensions: {
                         ...strip.dimensions,
@@ -570,7 +584,7 @@ export function Sidebar({
               : 'No cells selected'
           }
         />
-        {activeStrip && selectedRange && selectedAppearance ? (
+        {activeRow && selectedRange && selectedAppearance ? (
           <>
             <div className="range-action-group">
               <h3>Group header</h3>
@@ -646,6 +660,50 @@ export function Sidebar({
                       <b>B</b> Bold
                     </button>
                   </div>
+                  <div
+                    className="color-swatches header-color-swatches"
+                    aria-label="Group header background color presets"
+                  >
+                    <button
+                      style={{
+                        backgroundColor:
+                          DEFAULT_GROUP_HEADER_STYLE.backgroundColor,
+                      }}
+                      onClick={() =>
+                        onUpdateSelectedGroupHeader((header) => ({
+                          ...header,
+                          style: {
+                            ...header.style,
+                            backgroundColor:
+                              DEFAULT_GROUP_HEADER_STYLE.backgroundColor,
+                            textColor: DEFAULT_GROUP_HEADER_STYLE.textColor,
+                          },
+                        }))
+                      }
+                      aria-label="Use default group header colors"
+                      title="Default"
+                    />
+                    {CELL_COLOR_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        style={{ backgroundColor: preset.backgroundColor }}
+                        onClick={() =>
+                          onUpdateSelectedGroupHeader((header) => ({
+                            ...header,
+                            style: {
+                              ...header.style,
+                              backgroundColor: preset.backgroundColor,
+                              textColor: getContrastingTextColor(
+                                preset.backgroundColor,
+                              ),
+                            },
+                          }))
+                        }
+                        aria-label={`Use ${preset.name} group header background`}
+                        title={preset.name}
+                      />
+                    ))}
+                  </div>
                   <div className="color-field-list">
                     <ColorField
                       label="Background"
@@ -653,7 +711,11 @@ export function Sidebar({
                       onChange={(backgroundColor) =>
                         onUpdateSelectedGroupHeader((header) => ({
                           ...header,
-                          style: { ...header.style, backgroundColor },
+                          style: {
+                            ...header.style,
+                            backgroundColor,
+                            textColor: getContrastingTextColor(backgroundColor),
+                          },
                         }))
                       }
                     />
@@ -670,7 +732,7 @@ export function Sidebar({
                   </div>
                 </details>
               )}
-              {!selectedGroupHeader && activeStrip.groupHeaders.length > 0 && (
+              {!selectedGroupHeader && activeRow.groupHeaders.length > 0 && (
                 <p className="panel-note">
                   Overlapping an existing header is rejected. Click a header in
                   the strip to select and edit its exact range.
@@ -763,14 +825,14 @@ export function Sidebar({
               : 'No cells selected'
           }
         />
-        {activeStrip ? (
+        {activeRow ? (
           <>
             <AutoNumberTemplateField
               label="Line 1 template"
-              value={activeStrip.autoNumbering.line1Template}
+              value={activeRow.autoNumbering.line1Template}
               placeholder="Router Out"
               onChange={(line1Template) =>
-                onUpdateStrip((strip) => ({
+                onUpdateRow((strip) => ({
                   ...strip,
                   autoNumbering: {
                     ...strip.autoNumbering,
@@ -781,10 +843,10 @@ export function Sidebar({
             />
             <AutoNumberTemplateField
               label="Line 2 template"
-              value={activeStrip.autoNumbering.line2Template}
+              value={activeRow.autoNumbering.line2Template}
               placeholder="{n}"
               onChange={(line2Template) =>
-                onUpdateStrip((strip) => ({
+                onUpdateRow((strip) => ({
                   ...strip,
                   autoNumbering: {
                     ...strip.autoNumbering,
@@ -796,12 +858,12 @@ export function Sidebar({
             <div className="field-row">
               <NumberField
                 label="Start number"
-                value={activeStrip.autoNumbering.startNumber}
+                value={activeRow.autoNumbering.startNumber}
                 min={-999999}
                 max={999999}
                 step={1}
                 onChange={(startNumber) =>
-                  onUpdateStrip((strip) => ({
+                  onUpdateRow((strip) => ({
                     ...strip,
                     autoNumbering: {
                       ...strip.autoNumbering,
@@ -812,12 +874,12 @@ export function Sidebar({
               />
               <NumberField
                 label="Digit padding"
-                value={activeStrip.autoNumbering.digits}
+                value={activeRow.autoNumbering.digits}
                 min={1}
                 max={12}
                 step={1}
                 onChange={(digits) =>
-                  onUpdateStrip((strip) => ({
+                  onUpdateRow((strip) => ({
                     ...strip,
                     autoNumbering: {
                       ...strip.autoNumbering,
@@ -831,15 +893,15 @@ export function Sidebar({
               <span>Preview</span>
               <code>
                 {formatSequenceNumber(
-                  activeStrip.autoNumbering.startNumber,
-                  activeStrip.autoNumbering.digits,
+                  activeRow.autoNumbering.startNumber,
+                  activeRow.autoNumbering.digits,
                 )}
                 {' → '}
                 {formatSequenceNumber(
-                  activeStrip.autoNumbering.startNumber +
-                    (selectedCellCount || activeStrip.dimensions.cellCount) -
+                  activeRow.autoNumbering.startNumber +
+                    (selectedCellCount || activeRow.dimensions.cellCount) -
                     1,
-                  activeStrip.autoNumbering.digits,
+                  activeRow.autoNumbering.digits,
                 )}
               </code>
             </div>
@@ -857,7 +919,7 @@ export function Sidebar({
                 className="button numbering-secondary-button"
                 onClick={onApplyAutoNumberingToAll}
               >
-                Apply to all {activeStrip.dimensions.cellCount} cells
+                Apply to all {activeRow.dimensions.cellCount} cells
               </button>
             </div>
             <p className="panel-note numbering-note">

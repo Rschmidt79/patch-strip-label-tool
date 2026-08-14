@@ -2,6 +2,9 @@ import { useState } from 'react'
 import {
   CSS_PX_PER_MM,
   getCellWidthMm,
+  getStripRowTopOffsetsMm,
+  getStripTotalHeightMm,
+  getStripWidthMm,
   MM_PER_POINT,
 } from '../lib/dimensions'
 import {
@@ -15,14 +18,28 @@ import { StripArtwork } from './StripArtwork'
 
 interface StripSvgEditorProps {
   strip: LabelStrip
+  activeRowId: string | undefined
   selectedCellIds: readonly string[]
   editingCellId: string | undefined
   previewScale: number
-  onSelectCell: (cellId: string, extendSelection: boolean) => void
-  onSelectGroupHeader: (startCellId: string, endCellId: string) => void
+  onSelectCell: (
+    rowId: string,
+    cellId: string,
+    extendSelection: boolean,
+  ) => void
+  onSelectGroupHeader: (
+    rowId: string,
+    startCellId: string,
+    endCellId: string,
+  ) => void
   onClearSelection: () => void
-  onChangeCellText: (cellId: string, line1: string, line2: string) => void
-  onMoveCell: (cellId: string, direction: -1 | 1) => void
+  onChangeCellText: (
+    rowId: string,
+    cellId: string,
+    line1: string,
+    line2: string,
+  ) => void
+  onMoveCell: (rowId: string, cellId: string, direction: -1 | 1) => void
 }
 
 function editValue(cell: LabelCell): string {
@@ -93,6 +110,7 @@ function CellTextareaEditor({
 
 export function StripSvgEditor({
   strip,
+  activeRowId,
   selectedCellIds,
   editingCellId,
   previewScale,
@@ -102,19 +120,27 @@ export function StripSvgEditor({
   onChangeCellText,
   onMoveCell,
 }: StripSvgEditorProps) {
-  const { widthMm, heightMm } = strip.dimensions
-  const cellWidthMm = getCellWidthMm(strip)
-  const totalHeightMm = heightMm
+  const widthMm = getStripWidthMm(strip)
+  const totalHeightMm = getStripTotalHeightMm(strip)
   const displayWidthPx = widthMm * CSS_PX_PER_MM * previewScale
   const displayHeightPx = totalHeightMm * CSS_PX_PER_MM * previewScale
+  const activeRow =
+    strip.rows.find((row) => row.id === activeRowId) ?? strip.rows[0]
+  const rowTopOffsetsMm = getStripRowTopOffsetsMm(strip)
+  const rowsWithOffsets = strip.rows.map((row, index) => ({
+    row,
+    topMm: rowTopOffsetsMm[index],
+  }))
 
   return (
     <div className="strip-editor-stack" style={{ width: displayWidthPx }}>
-      <CellIndexRow
-        cells={strip.cells}
-        selectedCellIds={selectedCellIds}
-        widthPx={displayWidthPx}
-      />
+      {activeRow && (
+        <CellIndexRow
+          cells={activeRow.cells}
+          selectedCellIds={selectedCellIds}
+          widthPx={displayWidthPx}
+        />
+      )}
       <div
         className="strip-svg-stage"
         style={{ width: displayWidthPx, height: displayHeightPx }}
@@ -133,137 +159,148 @@ export function StripSvgEditor({
           if (event.target === event.currentTarget) onClearSelection()
         }}
       >
-        <StripArtwork
-          strip={strip}
-          hiddenCellIds={editingCellId ? [editingCellId] : []}
-        />
+        <StripArtwork strip={strip} hiddenCellIds={editingCellId ? [editingCellId] : []} />
 
-        {strip.groupHeaders.map((header) => {
-          const startCell = strip.cells[header.startCellIndex]
-          const endCell = strip.cells[header.endCellIndex]
-          const headerGeometry = getGroupHeaderGeometryMm(strip, header)
-          const headerTopMm =
-            heightMm - headerGeometry.yMm - headerGeometry.heightMm
-          const isSelected = strip.cells
-            .slice(header.startCellIndex, header.endCellIndex + 1)
-            .every((cell) => selectedCellIds.includes(cell.id))
-          if (!startCell || !endCell) return null
+        {rowsWithOffsets.map(({ row, topMm }, rowIndex) => {
+          const { heightMm } = row.dimensions
+          const cellWidthMm = getCellWidthMm(row)
+          const rowIsActive = row.id === activeRow?.id
           return (
             <g
-              key={`hit-${header.id}`}
-              className="svg-group-header"
-              role="button"
-              tabIndex={0}
-              aria-label={`Group header ${header.text}, cells ${header.startCellIndex + 1} through ${header.endCellIndex + 1}`}
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                onSelectGroupHeader(startCell.id, endCell.id)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelectGroupHeader(startCell.id, endCell.id)
-                }
-              }}
+              key={`editor-${row.id}`}
+              className={`svg-strip-row ${rowIsActive ? 'active' : ''}`}
+              transform={`translate(0 ${topMm})`}
             >
-              <rect
-                x={header.startCellIndex * cellWidthMm}
-                y={headerTopMm}
-                width={headerGeometry.widthMm}
-                height={headerGeometry.heightMm}
-                className="group-header-hit-area"
-              />
-              {isSelected && (
-                <rect
-                  x={header.startCellIndex * cellWidthMm + 0.1}
-                  y={headerTopMm + 0.1}
-                  width={
-                    (header.endCellIndex - header.startCellIndex + 1) *
-                      cellWidthMm -
-                    0.2
-                  }
-                  height={Math.max(0, headerGeometry.heightMm - 0.2)}
-                  className="cell-selection"
-                  strokeWidth={0.35}
-                />
-              )}
-            </g>
-          )
-        })}
-
-        {strip.cells.map((cell, index) => {
-          const cellX = index * cellWidthMm
-          const contentGeometry = getCellContentGeometryMm(strip, index)
-          const contentTopMm =
-            heightMm - contentGeometry.yMm - contentGeometry.heightMm
-          const isSelected = selectedCellIds.includes(cell.id)
-          const isEditing = cell.id === editingCellId
-
-          return (
-            <g
-              key={cell.id}
-              className={`svg-cell ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
-              role="button"
-              tabIndex={isSelected ? 0 : -1}
-              aria-selected={isSelected}
-              aria-label={`Cell ${index + 1}: ${cell.line1} ${cell.line2}`}
-              onPointerDown={(event) => {
-                if (
-                  event.target instanceof Element &&
-                  event.target.closest('.svg-cell-input')
-                ) {
-                  return
-                }
-                event.stopPropagation()
-                if (event.shiftKey) event.preventDefault()
-                onSelectCell(cell.id, event.shiftKey)
-              }}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) return
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelectCell(cell.id, event.shiftKey)
-                }
-              }}
-            >
-              <rect
-                x={cellX}
-                y={contentTopMm}
-                width={cellWidthMm}
-                height={contentGeometry.heightMm}
-                className="cell-hit-area"
-              />
-
-              {isSelected && (
-                <rect
-                  x={cellX + 0.1}
-                  y={contentTopMm + 0.1}
-                  width={Math.max(0, cellWidthMm - 0.2)}
-                  height={Math.max(0, contentGeometry.heightMm - 0.2)}
-                  className="cell-selection"
-                  strokeWidth={0.35}
-                />
-              )}
-
-              {isEditing && (
-                <>
-                  <foreignObject
-                    key={cell.id}
-                    x={cellX + 0.45}
-                    y={contentTopMm + 0.4}
-                    width={Math.max(0.5, cellWidthMm - 0.9)}
-                    height={Math.max(0.5, contentGeometry.heightMm - 0.8)}
+              {row.groupHeaders.map((header) => {
+                const startCell = row.cells[header.startCellIndex]
+                const endCell = row.cells[header.endCellIndex]
+                const headerGeometry = getGroupHeaderGeometryMm(row, header)
+                const headerTopMm =
+                  heightMm - headerGeometry.yMm - headerGeometry.heightMm
+                const isSelected =
+                  rowIsActive &&
+                  row.cells
+                    .slice(header.startCellIndex, header.endCellIndex + 1)
+                    .every((cell) => selectedCellIds.includes(cell.id))
+                if (!startCell || !endCell) return null
+                return (
+                  <g
+                    key={`hit-${header.id}`}
+                    className="svg-group-header"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Row ${rowIndex + 1}, group header ${header.text}, cells ${header.startCellIndex + 1} through ${header.endCellIndex + 1}`}
+                    onPointerDown={(event) => {
+                      event.stopPropagation()
+                      onSelectGroupHeader(row.id, startCell.id, endCell.id)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onSelectGroupHeader(row.id, startCell.id, endCell.id)
+                      }
+                    }}
                   >
-                    <CellTextareaEditor
-                      cell={cell}
-                      index={index}
-                      onChangeCellText={onChangeCellText}
-                      onMoveCell={onMoveCell}
-                      onClearSelection={onClearSelection}
+                    <rect
+                      x={header.startCellIndex * cellWidthMm}
+                      y={headerTopMm}
+                      width={headerGeometry.widthMm}
+                      height={headerGeometry.heightMm}
+                      className="group-header-hit-area"
                     />
-                  </foreignObject>
-                </>
-              )}
+                    {isSelected && (
+                      <rect
+                        x={header.startCellIndex * cellWidthMm + 0.1}
+                        y={headerTopMm + 0.1}
+                        width={Math.max(0, headerGeometry.widthMm - 0.2)}
+                        height={Math.max(0, headerGeometry.heightMm - 0.2)}
+                        className="cell-selection"
+                        strokeWidth={0.35}
+                      />
+                    )}
+                  </g>
+                )
+              })}
+
+              {row.cells.map((cell, index) => {
+                const cellX = index * cellWidthMm
+                const contentGeometry = getCellContentGeometryMm(row, index)
+                const contentTopMm =
+                  heightMm - contentGeometry.yMm - contentGeometry.heightMm
+                const isSelected =
+                  rowIsActive && selectedCellIds.includes(cell.id)
+                const isEditing = rowIsActive && cell.id === editingCellId
+
+                return (
+                  <g
+                    key={cell.id}
+                    className={`svg-cell ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
+                    role="button"
+                    tabIndex={isSelected ? 0 : -1}
+                    aria-selected={isSelected}
+                    aria-label={`Row ${rowIndex + 1}, cell ${index + 1}: ${cell.line1} ${cell.line2}`}
+                    onPointerDown={(event) => {
+                      if (
+                        event.target instanceof Element &&
+                        event.target.closest('.svg-cell-input')
+                      ) {
+                        return
+                      }
+                      event.stopPropagation()
+                      if (event.shiftKey) event.preventDefault()
+                      onSelectCell(row.id, cell.id, event.shiftKey)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onSelectCell(row.id, cell.id, event.shiftKey)
+                      }
+                    }}
+                  >
+                    <rect
+                      x={cellX}
+                      y={contentTopMm}
+                      width={cellWidthMm}
+                      height={contentGeometry.heightMm}
+                      className="cell-hit-area"
+                    />
+
+                    {isSelected && (
+                      <rect
+                        x={cellX + 0.1}
+                        y={contentTopMm + 0.1}
+                        width={Math.max(0, cellWidthMm - 0.2)}
+                        height={Math.max(0, contentGeometry.heightMm - 0.2)}
+                        className="cell-selection"
+                        strokeWidth={0.35}
+                      />
+                    )}
+
+                    {isEditing && (
+                      <foreignObject
+                        key={cell.id}
+                        x={cellX + 0.45}
+                        y={contentTopMm + 0.4}
+                        width={Math.max(0.5, cellWidthMm - 0.9)}
+                        height={Math.max(0.5, contentGeometry.heightMm - 0.8)}
+                      >
+                        <CellTextareaEditor
+                          cell={cell}
+                          index={index}
+                          onChangeCellText={(cellId, line1, line2) =>
+                            onChangeCellText(row.id, cellId, line1, line2)
+                          }
+                          onMoveCell={(cellId, direction) =>
+                            onMoveCell(row.id, cellId, direction)
+                          }
+                          onClearSelection={onClearSelection}
+                        />
+                      </foreignObject>
+                    )}
+                  </g>
+                )
+              })}
             </g>
           )
         })}

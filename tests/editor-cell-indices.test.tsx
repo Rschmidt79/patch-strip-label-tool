@@ -11,7 +11,7 @@ import { StripArtwork } from '../src/components/StripArtwork'
 import { getEditorCellIndices } from '../src/lib/editor-cell-indices'
 import { createLabelsPdf } from '../src/lib/pdf-export'
 import { serializeProject } from '../src/lib/project-file'
-import { createProject, createStrip } from '../src/model/defaults'
+import { createProject, createStrip, createStripRow } from '../src/model/defaults'
 
 function getDecodedPageContent(pdf: PDFDocument): string {
   const contents = pdf.getPage(0).node.Contents()
@@ -44,7 +44,7 @@ describe('editor cell indices', () => {
   )
 
   it('renders exactly one aligned index per editor cell', () => {
-    const strip = createStrip('Indexed', 432, 7.5, 24)
+    const strip = createStripRow('Indexed', 432, 7.5, 24)
     const markup = renderToStaticMarkup(
       <CellIndexRow
         cells={strip.cells}
@@ -79,7 +79,7 @@ describe('editor cell indices', () => {
   it('does not draw editor index labels into a blank-cell PDF', async () => {
     const project = createProject()
     const strip = createStrip('Blank indexed strip', 432, 7.5, 4)
-    strip.cells = strip.cells.map((cell) => ({
+    strip.rows[0].cells = strip.rows[0].cells.map((cell) => ({
       ...cell,
       line1: '',
       line2: '',

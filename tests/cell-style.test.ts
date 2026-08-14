@@ -4,12 +4,12 @@ import {
   applyCellAppearanceToRange,
   resetCellRangeStyle,
 } from '../src/lib/cell-style'
-import { createStrip } from '../src/model/defaults'
+import { createStripRow } from '../src/model/defaults'
 import { resizeStripCells } from '../src/lib/strip'
 
 describe('range cell styling', () => {
   it('changes only the selected range', () => {
-    const strip = createStrip('Highlights', 432, 7.5, 12)
+    const strip = createStripRow('Highlights', 432, 7.5, 12)
     const styled = applyCellAppearanceToRange(
       strip,
       { startIndex: 4, endIndex: 7 },
@@ -25,7 +25,7 @@ describe('range cell styling', () => {
 
   it('survives range auto numbering exactly', () => {
     const strip = applyCellAppearanceToRange(
-      createStrip('Styled numbering', 432, 7.5, 12),
+      createStripRow('Styled numbering', 432, 7.5, 12),
       { startIndex: 0, endIndex: 5 },
       { backgroundColor: '#f4d35e', borderColor: '#9a7920' },
     )
@@ -39,7 +39,7 @@ describe('range cell styling', () => {
   })
 
   it('resets text and appearance defaults only inside the selected range', () => {
-    const strip = createStrip('Reset', 432, 7.5, 12)
+    const strip = createStripRow('Reset', 432, 7.5, 12)
     strip.cells[2].style = { ...strip.cells[2].style, alignment: 'right' }
     strip.cells[2].appearance = {
       backgroundColor: '#c74d49',
@@ -57,7 +57,7 @@ describe('range cell styling', () => {
 
   it('preserves styling when a styled cell survives a cell-count change', () => {
     const strip = applyCellAppearanceToRange(
-      createStrip('Resize', 432, 7.5, 12),
+      createStripRow('Resize', 432, 7.5, 12),
       { startIndex: 4, endIndex: 7 },
       { backgroundColor: '#3b8f5a', textColor: '#ffffff' },
     )

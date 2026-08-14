@@ -1,4 +1,4 @@
-import type { LabelStrip } from '../model/project'
+import type { LabelStrip, LabelStripRow } from '../model/project'
 
 export const CSS_PX_PER_MM = 96 / 25.4
 export const POINTS_PER_MM = 72 / 25.4
@@ -12,27 +12,48 @@ export function pointsToMillimeters(points: number): number {
   return points * MM_PER_POINT
 }
 
-export function getCellWidthMm(strip: LabelStrip): number {
-  if (strip.dimensions.cellWidthMode === 'custom') {
-    return strip.dimensions.customCellWidthMm
+export function getCellWidthMm(row: LabelStripRow): number {
+  if (row.dimensions.cellWidthMode === 'custom') {
+    return row.dimensions.customCellWidthMm
   }
 
-  return strip.dimensions.widthMm / strip.dimensions.cellCount
+  return row.dimensions.widthMm / row.dimensions.cellCount
 }
 
-export function getGroupHeaderBandHeightMm(strip: LabelStrip): number {
+export function getGroupHeaderBandHeightMm(row: LabelStripRow): number {
   return Math.min(
-    strip.dimensions.groupHeaderBandHeightMm,
-    Math.max(0, strip.dimensions.heightMm - 0.5),
+    row.dimensions.groupHeaderBandHeightMm,
+    Math.max(0, row.dimensions.heightMm - 0.5),
   )
 }
 
-export function getGroupHeaderRowHeightMm(strip: LabelStrip): number {
-  return strip.groupHeaders.length > 0 ? getGroupHeaderBandHeightMm(strip) : 0
+export function getGroupHeaderRowHeightMm(row: LabelStripRow): number {
+  return row.groupHeaders.length > 0 ? getGroupHeaderBandHeightMm(row) : 0
 }
 
-export function getStripTotalHeightMm(strip: LabelStrip): number {
-  return strip.dimensions.heightMm
+export function getStripWidthMm(strip: LabelStrip): number {
+  return strip.rows[0]?.dimensions.widthMm ?? 0
+}
+
+export function getStripRowTopOffsetsMm(strip: LabelStrip): number[] {
+  const offsetsMm: number[] = []
+  let topMm = 0
+  for (const row of strip.rows) {
+    offsetsMm.push(topMm)
+    topMm += row.dimensions.heightMm
+  }
+  return offsetsMm
+}
+
+export function getStripTotalHeightMm(
+  strip: LabelStrip | LabelStripRow,
+): number {
+  return 'rows' in strip
+    ? strip.rows.reduce(
+        (heightMm, row) => heightMm + row.dimensions.heightMm,
+        0,
+      )
+    : strip.dimensions.heightMm
 }
 
 export function formatMillimeters(value: number, precision = 2): string {

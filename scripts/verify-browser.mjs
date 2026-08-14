@@ -104,7 +104,7 @@ async function clickStripButton(stripIndex, text) {
 
 async function selectPreset(presetId) {
   const changed = await execute(
-    `const select = document.querySelectorAll('.sidebar-panel')[1]?.querySelector('select'); if (!select) return false; select.value = arguments[0]; select.dispatchEvent(new Event('change', { bubbles: true })); return true;`,
+    `const select = document.querySelector('.sidebar-panel:first-of-type select'); if (!select) return false; select.value = arguments[0]; select.dispatchEvent(new Event('change', { bubbles: true })); return true;`,
     [presetId],
   )
   assert(changed, `Preset selector not found for ${presetId}`)
@@ -198,7 +198,7 @@ try {
   const emptyDefaults = await execute(
     `return { cells: [...document.querySelectorAll('.strip-card:first-of-type .svg-cell')].map((cell) => cell.getAttribute('aria-label')), line1Template: document.querySelector('input[aria-label="Line 1 template"]')?.value, line2Template: document.querySelector('input[aria-label="Line 2 template"]')?.value };`,
   )
-  assert(emptyDefaults.cells.every((label) => /^Cell \d+:\s*$/.test(label)), 'New strip cells were not empty')
+  assert(emptyDefaults.cells.every((label) => /^Row 1, cell \d+:\s*$/i.test(label)), 'New strip cells were not empty')
   assert(emptyDefaults.line1Template === 'Router Out' && emptyDefaults.line2Template === '{n}', 'Neutral Auto Number templates were not retained unapplied')
 
   const presetCounts = [4, 7, 8, 12, 16, 20, 24]
@@ -227,6 +227,13 @@ try {
   assert(rangeVisual.selectionRects === 6, 'Selected cell outlines were not visible')
   assert(rangeVisual.footer?.startsWith('Selected: Cells 1–6'), `Selected range status was not visible in the editor: ${JSON.stringify(rangeVisual)}`)
   assert(rangeVisual.sidebar.includes('Selected: Cells 1–6'), 'Selected range status was not visible in the sidebar')
+  const compactFocus = await execute(
+    `const cell = document.querySelector('.strip-card:first-of-type .svg-cell.selected'); const hit = cell?.querySelector('.cell-hit-area'); if (!cell || !hit) return undefined; cell.focus(); const cellStyle = getComputedStyle(cell); const hitStyle = getComputedStyle(hit); const cellBounds = cell.getBBox(); const hitBounds = hit.getBBox(); return { tabIndex: cell.tabIndex, outlineStyle: cellStyle.outlineStyle, stroke: hitStyle.stroke, strokeWidth: hitStyle.strokeWidth, widthDelta: Math.abs(cellBounds.width - hitBounds.width), heightDelta: Math.abs(cellBounds.height - hitBounds.height) };`,
+  )
+  assert(compactFocus?.tabIndex === 0, 'Selected cell was not keyboard focusable')
+  assert(compactFocus.outlineStyle === 'none', 'Browser SVG focus outline was not suppressed')
+  assert(compactFocus.stroke !== 'none' && compactFocus.strokeWidth === '0.3px', 'Keyboard focus did not use the compact cell-bounds indicator')
+  assert(compactFocus.widthDelta < 0.01 && compactFocus.heightDelta < 0.01, 'Keyboard focus indicator exceeded the physical cell bounds')
   await addHeader('MICROPHONES')
 
   const headerGeometry = await execute(
@@ -279,13 +286,13 @@ try {
 
   await selectRange(0, 5)
   const yellowApplied = await execute(
-    `const button = document.querySelector('.color-swatches button[title="Yellow"]'); if (!button) return false; button.click(); return true;`,
+    `const button = document.querySelector('.range-style-group .color-swatches button[title="Yellow"]'); if (!button) return false; button.click(); return true;`,
   )
   assert(yellowApplied, 'Yellow range preset was not available')
   await delay(120)
   await selectRange(6, 11)
   const blueApplied = await execute(
-    `const button = document.querySelector('.color-swatches button[title="Blue"]'); if (!button) return false; button.click(); return true;`,
+    `const button = document.querySelector('.range-style-group .color-swatches button[title="Blue"]'); if (!button) return false; button.click(); return true;`,
   )
   assert(blueApplied, 'Blue range preset was not available')
   await delay(120)
@@ -338,7 +345,7 @@ try {
   await clickStripButton(0, 'Duplicate')
 
   const packedPreview = await execute(
-    `const cards = document.querySelectorAll('.page-layout-preview .page-preview-card'); const preview = cards[0]?.querySelector('svg'); return { pages: cards.length, aria: preview?.getAttribute('aria-label'), headers: document.querySelectorAll('.page-layout-preview .group-header-copy').length, stripGroups: preview?.querySelectorAll(':scope > g:not(.page-preview-support)').length, supportDecorations: preview?.querySelectorAll(':scope > .page-preview-support').length, editorIndices: document.querySelectorAll('.page-layout-preview .cell-index-row').length, editorIndexMarkers: document.querySelectorAll('.page-layout-preview [data-editor-only="cell-indices"]').length };`,
+    `const cards = document.querySelectorAll('.page-layout-preview .page-preview-card'); const preview = cards[0]?.querySelector('svg'); return { pages: cards.length, aria: preview?.getAttribute('aria-label'), headers: document.querySelectorAll('.page-layout-preview .group-header-copy').length, stripGroups: preview?.querySelectorAll(':scope > .page-preview-strip').length, supportDecorations: preview?.querySelectorAll(':scope > .page-preview-support').length, editorIndices: document.querySelectorAll('.page-layout-preview .cell-index-row').length, editorIndexMarkers: document.querySelectorAll('.page-layout-preview [data-editor-only="cell-indices"]').length };`,
   )
   assert(packedPreview.pages === 1, 'Two 432 mm strips did not share one A3 page')
   assert(packedPreview.aria === 'Page 1 layout with 2 strips', 'Page preview did not use the shared two-strip placement plan')
@@ -346,13 +353,30 @@ try {
   assert(packedPreview.supportDecorations === 1, 'Enabled support QR was not shown in the reserved preview area')
   assert(packedPreview.editorIndices === 0 && packedPreview.editorIndexMarkers === 0, 'Editor indices leaked into page preview')
 
+  const selectedForJoin = await execute(
+    `const inputs = [...document.querySelectorAll('.strip-card .join-strip-toggle input')]; inputs.forEach((input) => input.click()); return inputs.length;`,
+  )
+  assert(selectedForJoin === 2, 'Join selection controls were not available on both strips')
+  await clickButton('Join strips')
+  const joinedState = await execute(
+    `const card = document.querySelector('.strip-card'); return { cards: document.querySelectorAll('.strip-card').length, rows: card?.querySelectorAll('.strip-artwork').length, heightMm: Number(card?.querySelector('.strip-svg')?.dataset.heightMm), previewPlacements: document.querySelectorAll('.page-preview-strip').length };`,
+  )
+  assert(joinedState.cards === 1 && joinedState.rows === 2, 'Join strips did not create one two-row editor block')
+  assert(joinedState.heightMm === 15 && joinedState.previewPlacements === 1, 'Joined rows were not treated as one 15 mm print placement')
+  await clickStripButton(0, 'Split rows')
+  const splitState = await execute(
+    `return { cards: document.querySelectorAll('.strip-card').length, rows: [...document.querySelectorAll('.strip-card')].map((card) => card.querySelectorAll('.strip-artwork').length), heights: [...document.querySelectorAll('.strip-card .strip-svg')].map((svg) => Number(svg.dataset.heightMm)) };`,
+  )
+  assert(splitState.cards === 2 && splitState.rows.every((count) => count === 1), 'Split rows did not restore individual strip blocks')
+  assert(splitState.heights.every((heightMm) => heightMm === 7.5), 'Split rows changed physical row height')
+
   const beforeSave = await readdir(downloadDirectory)
   await clickButton('Save')
   const projectFile = await waitForDownload('.racklabel', beforeSave)
   const savedProject = JSON.parse(await readFile(projectFile, 'utf8'))
-  assert(savedProject.schemaVersion === 3, 'Saved project did not use schema version 3')
+  assert(savedProject.schemaVersion === 5, 'Saved project did not use schema version 5')
   assert(savedProject.strips.length === 2, 'Saved project did not contain both strips')
-  assert(savedProject.strips.every((strip) => strip.dimensions.heightMm === 7.5 && strip.dimensions.groupHeaderBandHeightMm === 2), 'Saved project did not preserve fixed-height internal headers')
+  assert(savedProject.strips.every((strip) => strip.rows.every((row) => row.dimensions.heightMm === 7.5 && row.dimensions.groupHeaderBandHeightMm === 2)), 'Saved project did not preserve fixed-height internal headers')
   const savedProjectText = await readFile(projectFile, 'utf8')
   assert(!savedProjectText.includes('cell-index-row') && !savedProjectText.includes('data-cell-index'), 'Editor indices leaked into project JSON')
   await execute(`window.confirm = () => true;`)
@@ -427,7 +451,7 @@ try {
   const hostileProject = JSON.parse(await readFile(hostileProjectFile, 'utf8'))
   assert(hostileProject.name === attackStrings.at(-1), 'Hostile project name was not saved literally')
   assert(hostileProject.strips[0].name === attackStrings.at(-1), 'Hostile strip name was not saved literally')
-  assert(hostileProject.strips[0].groupHeaders[0].text === attackStrings.at(-1), 'Hostile header was not saved literally')
+  assert(hostileProject.strips[0].rows[0].groupHeaders[0].text === attackStrings.at(-1), 'Hostile header was not saved literally')
   assert(!/[\\/:*?"<>|]/.test(path.basename(hostileProjectFile)), 'Generated project filename retained unsafe path characters')
   const hostileFileInputId = await findElement('input[type="file"]')
   await request(`/session/${sessionId}/element/${hostileFileInputId}/value`, 'POST', {

@@ -1,4 +1,4 @@
-import type { CellAppearance, LabelStrip } from '../model/project'
+import type { CellAppearance, LabelStripRow } from '../model/project'
 import { normalizeCellRange, type CellRange } from './cell-range'
 import {
   getContrastingTextColor,
@@ -70,10 +70,10 @@ export const CELL_COLOR_PRESETS: readonly CellColorPreset[] = [
 ]
 
 export function applyCellAppearanceToRange(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
   appearance: Partial<CellAppearance>,
-): LabelStrip {
+): LabelStripRow {
   const normalizedRange = normalizeCellRange(strip.cells.length, range)
   return {
     ...strip,
@@ -89,10 +89,10 @@ export function applyCellAppearanceToRange(
 }
 
 export function shiftCellRangeLightness(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
   direction: 'lighter' | 'darker',
-): LabelStrip {
+): LabelStripRow {
   const normalizedRange = normalizeCellRange(strip.cells.length, range)
   return {
     ...strip,
@@ -116,9 +116,9 @@ export function shiftCellRangeLightness(
 }
 
 export function resetCellRangeStyle(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
-): LabelStrip {
+): LabelStripRow {
   const normalizedRange = normalizeCellRange(strip.cells.length, range)
   return {
     ...strip,

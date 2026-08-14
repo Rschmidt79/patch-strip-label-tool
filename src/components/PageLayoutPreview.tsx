@@ -333,6 +333,7 @@ export function PageLayoutPreview({
                     return (
                       <g
                         key={placement.stripId}
+                        className="page-preview-strip"
                         transform={`translate(${origin.xMm} ${plan.pageHeightMm - origin.yMm}) rotate(${-placement.rotationDegrees}) translate(0 ${-placement.heightMm})`}
                       >
                         <title>

@@ -1,4 +1,4 @@
-import type { AutoNumberingSettings, LabelStrip } from '../model/project'
+import type { AutoNumberingSettings, LabelStripRow } from '../model/project'
 import { normalizeCellRange, type CellRange } from './cell-range'
 
 export type { CellRange } from './cell-range'
@@ -43,9 +43,9 @@ export function insertNumberPlaceholder(
 }
 
 export function applyAutoNumbering(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   settings: AutoNumberingSettings = strip.autoNumbering,
-): LabelStrip {
+): LabelStripRow {
   return applyAutoNumberingToRange(
     strip,
     { startIndex: 0, endIndex: strip.cells.length - 1 },
@@ -54,10 +54,10 @@ export function applyAutoNumbering(
 }
 
 export function applyAutoNumberingToRange(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
   settings: AutoNumberingSettings = strip.autoNumbering,
-): LabelStrip {
+): LabelStripRow {
   const normalizedSettings: AutoNumberingSettings = {
     ...settings,
     startNumber: Math.trunc(settings.startNumber),
@@ -98,9 +98,9 @@ export function applyAutoNumberingToRange(
 }
 
 export function clearCellRangeContents(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
-): LabelStrip {
+): LabelStripRow {
   const normalizedRange = normalizeCellRange(strip.cells.length, range)
   return {
     ...strip,

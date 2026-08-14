@@ -63,7 +63,8 @@ export interface AutoNumberingSettings {
   cellCount: number
 }
 
-export interface LabelStrip {
+/** One independently editable physical row inside a label strip block. */
+export interface LabelStripRow {
   id: string
   name: string
   dimensions: StripDimensions
@@ -74,8 +75,15 @@ export interface LabelStrip {
   autoNumbering: AutoNumberingSettings
 }
 
+/** One physical label and therefore one indivisible print placement object. */
+export interface LabelStrip {
+  id: string
+  name: string
+  rows: LabelStripRow[]
+}
+
 export interface LabelProject {
-  schemaVersion: 3
+  schemaVersion: 5
   id: string
   name: string
   createdAt: string

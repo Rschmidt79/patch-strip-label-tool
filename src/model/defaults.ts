@@ -5,6 +5,7 @@ import type {
   LabelCell,
   LabelProject,
   LabelStrip,
+  LabelStripRow,
 } from './project'
 
 export const DEFAULT_TEXT_STYLE: CellTextStyle = {
@@ -48,17 +49,17 @@ export function createCell(
   }
 }
 
-export function createStrip(
-  name = 'Strip 1',
+export function createStripRow(
+  name = 'Row 1',
   widthMm = 432,
   heightMm = 7.5,
   cellCount = 16,
-): LabelStrip {
+): LabelStripRow {
   const defaultTextStyle = { ...DEFAULT_TEXT_STYLE }
   const defaultCellAppearance = { ...DEFAULT_CELL_APPEARANCE }
 
   return {
-    id: createId('strip'),
+    id: createId('row'),
     name,
     dimensions: {
       widthMm,
@@ -84,11 +85,33 @@ export function createStrip(
   }
 }
 
+export function createStrip(
+  name = 'Strip 1',
+  widthMm = 432,
+  heightMm = 7.5,
+  cellCount = 16,
+  rowCount = 1,
+): LabelStrip {
+  const normalizedRowCount = Math.max(1, Math.min(3, Math.round(rowCount)))
+  return {
+    id: createId('strip'),
+    name,
+    rows: Array.from({ length: normalizedRowCount }, (_, index) =>
+      createStripRow(
+        normalizedRowCount === 1 ? name : `${name} row ${index + 1}`,
+        widthMm,
+        heightMm,
+        cellCount,
+      ),
+    ),
+  }
+}
+
 export function createProject(): LabelProject {
   const now = new Date().toISOString()
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 5,
     id: createId('project'),
     name: 'Studio Rack Labels',
     createdAt: now,

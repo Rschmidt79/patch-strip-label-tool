@@ -76,17 +76,19 @@ describe('untrusted project content', () => {
     'renders hostile cell and header content as literal SVG text: %s',
     (attack) => {
       const project = createProject()
-      let strip = project.strips[0]
-      strip.cells[0] = {
-        ...strip.cells[0],
+      const strip = project.strips[0]
+      let row = strip.rows[0]
+      row.cells[0] = {
+        ...row.cells[0],
         line1: attack,
         line2: attack,
       }
-      strip = addGroupHeader(
-        strip,
+      row = addGroupHeader(
+        row,
         { startIndex: 0, endIndex: 3 },
         attack,
       )
+      strip.rows[0] = row
       const markup = renderToStaticMarkup(
         <svg>
           <StripArtwork strip={strip} />
@@ -124,9 +126,9 @@ describe('untrusted project content', () => {
     const attack = '</text><script>alert(1)</script>'
     project.name = attack
     project.strips[0].name = attack
-    project.strips[0].cells[0].line1 = attack
-    project.strips[0] = addGroupHeader(
-      project.strips[0],
+    project.strips[0].rows[0].cells[0].line1 = attack
+    project.strips[0].rows[0] = addGroupHeader(
+      project.strips[0].rows[0],
       { startIndex: 0, endIndex: 3 },
       attack,
     )
@@ -134,16 +136,16 @@ describe('untrusted project content', () => {
     const imported = parseProjectJson(serializeProject(project))
     expect(imported.name).toBe(attack)
     expect(imported.strips[0].name).toBe(attack)
-    expect(imported.strips[0].cells[0].line1).toBe(attack)
-    expect(imported.strips[0].groupHeaders[0].text).toBe(attack)
+    expect(imported.strips[0].rows[0].cells[0].line1).toBe(attack)
+    expect(imported.strips[0].rows[0].groupHeaders[0].text).toBe(attack)
   })
 
   it('exports script-like angle-bracket text as inert PDF text data', async () => {
     const project = createProject()
     const attack = '</text><script>alert(1)</script>'
-    project.strips[0].cells[0].line1 = attack
-    project.strips[0] = addGroupHeader(
-      project.strips[0],
+    project.strips[0].rows[0].cells[0].line1 = attack
+    project.strips[0].rows[0] = addGroupHeader(
+      project.strips[0].rows[0],
       { startIndex: 0, endIndex: 3 },
       '<script>alert(1)</script>',
     )
@@ -177,7 +179,7 @@ describe('project import resource and style validation', () => {
 
   it('rejects excessive cell, strip, header, and text counts before rendering', () => {
     const tooManyCells = JSON.parse(serializeProject(createProject()))
-    tooManyCells.strips[0].dimensions.cellCount =
+    tooManyCells.strips[0].rows[0].dimensions.cellCount =
       MAX_CELLS_PER_STRIP + 1
     expect(() => parseProjectJson(JSON.stringify(tooManyCells))).toThrow(
       `no more than ${MAX_CELLS_PER_STRIP}`,
@@ -193,8 +195,8 @@ describe('project import resource and style validation', () => {
     )
 
     const tooManyHeaders = JSON.parse(serializeProject(createProject()))
-    tooManyHeaders.strips[0].groupHeaders = Array.from(
-      { length: tooManyHeaders.strips[0].dimensions.cellCount + 1 },
+    tooManyHeaders.strips[0].rows[0].groupHeaders = Array.from(
+      { length: tooManyHeaders.strips[0].rows[0].dimensions.cellCount + 1 },
       () => ({ id: 'group', text: '', startCellIndex: 0, endCellIndex: 0 }),
     )
     expect(() => parseProjectJson(JSON.stringify(tooManyHeaders))).toThrow(
@@ -202,7 +204,7 @@ describe('project import resource and style validation', () => {
     )
 
     const overlongText = JSON.parse(serializeProject(createProject()))
-    overlongText.strips[0].cells[0].line1 = 'x'.repeat(
+    overlongText.strips[0].rows[0].cells[0].line1 = 'x'.repeat(
       MAX_CELL_TEXT_LENGTH + 1,
     )
     expect(() => parseProjectJson(JSON.stringify(overlongText))).toThrow(
@@ -218,7 +220,7 @@ describe('project import resource and style validation', () => {
       '#fff',
     ]) {
       const value = JSON.parse(serializeProject(createProject()))
-      value.strips[0].cells[0].appearance.backgroundColor = color
+      value.strips[0].rows[0].cells[0].appearance.backgroundColor = color
       expect(() => parseProjectJson(JSON.stringify(value))).toThrow(
         ProjectFileError,
       )

@@ -7,6 +7,7 @@ import type {
   LabelCell,
   LabelProject,
   LabelStrip,
+  LabelStripRow,
   PageSettings,
   StripDimensions,
 } from '../model/project'
@@ -24,7 +25,9 @@ import {
   MAX_LABEL_TEXT_LENGTH,
   MAX_NAME_LENGTH,
   MAX_PROJECT_FILE_BYTES,
+  MAX_PROJECT_ROWS,
   MAX_PROJECT_STRIPS,
+  MAX_ROWS_PER_STRIP,
   MAX_TIMESTAMP_LENGTH,
 } from '../config/content-limits'
 import {
@@ -388,21 +391,24 @@ function parseAutoNumbering(
   }
 }
 
-function parseStrip(value: unknown, index: number): LabelStrip {
-  const path = `strips[${index}]`
-  const strip = expectRecord(value, path)
-  const dimensions = parseDimensions(strip.dimensions, `${path}.dimensions`)
+function parseStripRow(
+  value: unknown,
+  path: string,
+  identity?: { id: string; name: string },
+): LabelStripRow {
+  const row = expectRecord(value, path)
+  const dimensions = parseDimensions(row.dimensions, `${path}.dimensions`)
 
-  if (!Array.isArray(strip.cells))
+  if (!Array.isArray(row.cells))
     throw new ProjectFileError(`${path}.cells must be a list.`)
-  if (strip.cells.length !== dimensions.cellCount) {
+  if (row.cells.length !== dimensions.cellCount) {
     throw new ProjectFileError(
       `${path}.cells must contain exactly ${dimensions.cellCount} cells.`,
     )
   }
 
   const autoNumbering = parseAutoNumbering(
-    strip.autoNumbering,
+    row.autoNumbering,
     `${path}.autoNumbering`,
   )
   if (autoNumbering.cellCount !== dimensions.cellCount) {
@@ -412,20 +418,20 @@ function parseStrip(value: unknown, index: number): LabelStrip {
   }
 
   const defaultCellAppearance = parseCellAppearance(
-    strip.defaultCellAppearance,
+    row.defaultCellAppearance,
     `${path}.defaultCellAppearance`,
   )
   const groupHeaders =
-    strip.groupHeaders === undefined
+    row.groupHeaders === undefined
       ? []
-      : Array.isArray(strip.groupHeaders)
+      : Array.isArray(row.groupHeaders)
         ? (() => {
-            if (strip.groupHeaders.length > dimensions.cellCount) {
+            if (row.groupHeaders.length > dimensions.cellCount) {
               throw new ProjectFileError(
                 `${path}.groupHeaders cannot contain more entries than cells.`,
               )
             }
-            return strip.groupHeaders.map((header, headerIndex) =>
+            return row.groupHeaders.map((header, headerIndex) =>
               parseGroupHeader(
                 header,
                 `${path}.groupHeaders[${headerIndex}]`,
@@ -436,16 +442,19 @@ function parseStrip(value: unknown, index: number): LabelStrip {
             throw new ProjectFileError(`${path}.groupHeaders must be a list.`)
           })()
 
-  const parsed: LabelStrip = {
-    id: expectNonEmptyString(strip.id, `${path}.id`, MAX_ID_LENGTH),
-    name: expectString(strip.name, `${path}.name`, MAX_NAME_LENGTH),
+  const parsed: LabelStripRow = {
+    id:
+      identity?.id ??
+      expectNonEmptyString(row.id, `${path}.id`, MAX_ID_LENGTH),
+    name:
+      identity?.name ?? expectString(row.name, `${path}.name`, MAX_NAME_LENGTH),
     dimensions,
     defaultTextStyle: parseTextStyle(
-      strip.defaultTextStyle,
+      row.defaultTextStyle,
       `${path}.defaultTextStyle`,
     ),
     defaultCellAppearance,
-    cells: strip.cells.map((cell, cellIndex) =>
+    cells: row.cells.map((cell, cellIndex) =>
       parseCell(
         cell,
         `${path}.cells[${cellIndex}]`,
@@ -467,9 +476,65 @@ function parseStrip(value: unknown, index: number): LabelStrip {
   return parsed
 }
 
+function migratedLegacyRowId(stripId: string, index: number): string {
+  let hash = 2_166_136_261
+  for (const character of stripId) {
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16_777_619)
+  }
+  return `row-migrated-${index + 1}-${(hash >>> 0).toString(36)}`
+}
+
+function parseLegacyStrip(value: unknown, index: number): LabelStrip {
+  const path = `strips[${index}]`
+  const strip = expectRecord(value, path)
+  const id = expectNonEmptyString(strip.id, `${path}.id`, MAX_ID_LENGTH)
+  const name = expectString(strip.name, `${path}.name`, MAX_NAME_LENGTH)
+  return {
+    id,
+    name,
+    rows: [
+      parseStripRow(strip, path, {
+        id: migratedLegacyRowId(id, index),
+        name,
+      }),
+    ],
+  }
+}
+
+function parseStrip(value: unknown, index: number): LabelStrip {
+  const path = `strips[${index}]`
+  const strip = expectRecord(value, path)
+  if (!Array.isArray(strip.rows)) {
+    throw new ProjectFileError(`${path}.rows must be a list.`)
+  }
+  if (strip.rows.length < 1 || strip.rows.length > MAX_ROWS_PER_STRIP) {
+    throw new ProjectFileError(
+      `${path}.rows must contain between 1 and ${MAX_ROWS_PER_STRIP} rows.`,
+    )
+  }
+  const rows = strip.rows.map((row, rowIndex) =>
+    parseStripRow(row, `${path}.rows[${rowIndex}]`),
+  )
+  const widthMm = rows[0].dimensions.widthMm
+  if (
+    rows.some(
+      (row) => Math.abs(row.dimensions.widthMm - widthMm) > 1e-6,
+    )
+  ) {
+    throw new ProjectFileError(
+      `${path}.rows must all have the same physical width.`,
+    )
+  }
+  return {
+    id: expectNonEmptyString(strip.id, `${path}.id`, MAX_ID_LENGTH),
+    name: expectString(strip.name, `${path}.name`, MAX_NAME_LENGTH),
+    rows,
+  }
+}
+
 function parseSupportedVersion(
   value: Record<string, unknown>,
-  version: 1 | 2 | 3 | 4,
+  version: 1 | 2 | 3 | 4 | 5,
 ): ProjectImportResult {
   if (!Array.isArray(value.strips))
     throw new ProjectFileError('strips must be a list.')
@@ -483,22 +548,35 @@ function parseSupportedVersion(
     value.page,
     version === 4,
   )
+  const strips =
+    version === 5
+      ? value.strips.map(parseStrip)
+      : value.strips.map(parseLegacyStrip)
+  const rowCount = strips.reduce((count, strip) => count + strip.rows.length, 0)
+  if (rowCount > MAX_PROJECT_ROWS) {
+    throw new ProjectFileError(
+      `strips must contain no more than ${MAX_PROJECT_ROWS} rows in total.`,
+    )
+  }
   const project: LabelProject = {
-    schemaVersion: 3,
+    schemaVersion: 5,
     id: expectNonEmptyString(value.id, 'id', MAX_ID_LENGTH),
     name: expectString(value.name, 'name', MAX_NAME_LENGTH),
     createdAt: expectIsoDateString(value.createdAt, 'createdAt'),
     updatedAt: expectIsoDateString(value.updatedAt, 'updatedAt'),
     page: parsedPage.page,
-    strips: value.strips.map(parseStrip),
+    strips,
   }
 
   const ids = [
     project.id,
     ...project.strips.flatMap((strip) => [
       strip.id,
-      ...strip.cells.map((cell) => cell.id),
-      ...strip.groupHeaders.map((header) => header.id),
+      ...strip.rows.flatMap((row) => [
+        row.id,
+        ...row.cells.map((cell) => cell.id),
+        ...row.groupHeaders.map((header) => header.id),
+      ]),
     ]),
   ]
   if (new Set(ids).size !== ids.length)
@@ -524,6 +602,7 @@ function migrateProject(value: unknown): ProjectImportResult {
     case 2:
     case 3:
     case 4:
+    case 5:
       return parseSupportedVersion(root, version)
     default:
       throw new ProjectFileError(

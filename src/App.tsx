@@ -6,7 +6,15 @@ import { Sidebar } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
 import { Workspace } from './components/Workspace'
 import { createProject, createStrip } from './model/defaults'
-import { duplicateStrip, removeStrip } from './lib/strip'
+import {
+  addStripRow,
+  duplicateStrip,
+  getStripJoinError,
+  joinStrips,
+  removeStrip,
+  splitStripRows,
+  updateStripRow,
+} from './lib/strip'
 import {
   applyCellAppearanceToRange,
   resetCellRangeStyle,
@@ -56,23 +64,29 @@ import type {
   LabelCell,
   LabelProject,
   LabelStrip,
+  LabelStripRow,
 } from './model/project'
 import {
   createFeedbackMailto,
   PRINT_SCALING_BODY,
   PRINT_SCALING_TITLE,
 } from './config/app-info'
-import { MAX_PROJECT_STRIPS } from './config/content-limits'
+import {
+  MAX_PROJECT_ROWS,
+  MAX_PROJECT_STRIPS,
+} from './config/content-limits'
 import { PROJECT_FILE_MIME_TYPE } from './config/project-files'
 
 interface CellSelection {
   stripId: string
+  rowId: string
   anchorCellId: string
   focusCellId: string
 }
 
 interface ResolvedCellSelection extends CellRange {
   stripId: string
+  rowId: string
   cellIds: string[]
 }
 
@@ -110,6 +124,10 @@ export function App() {
   const [activeStripId, setActiveStripId] = useState<string | undefined>(
     project.strips[0]?.id,
   )
+  const [activeRowId, setActiveRowId] = useState<string | undefined>(
+    project.strips[0]?.rows[0]?.id,
+  )
+  const [selectedJoinStripIds, setSelectedJoinStripIds] = useState<string[]>([])
   const [selection, setSelection] = useState<CellSelection | undefined>()
   const [editingCellId, setEditingCellId] = useState<string | undefined>()
   const [previewScale, setPreviewScale] = useState(1.35)
@@ -136,6 +154,13 @@ export function App() {
     () => project.strips.find((strip) => strip.id === activeStripId),
     [activeStripId, project.strips],
   )
+  const activeRow = useMemo(
+    () => activeStrip?.rows.find((row) => row.id === activeRowId),
+    [activeRowId, activeStrip],
+  )
+  const activeRowIndex = activeStrip?.rows.findIndex(
+    (row) => row.id === activeRowId,
+  ) ?? -1
   const resolvedSelection = useMemo<ResolvedCellSelection | undefined>(() => {
     if (!selection) return undefined
     const strip = project.strips.find(
@@ -143,10 +168,13 @@ export function App() {
     )
     if (!strip) return undefined
 
-    const anchorIndex = strip.cells.findIndex(
+    const row = strip.rows.find((candidate) => candidate.id === selection.rowId)
+    if (!row) return undefined
+
+    const anchorIndex = row.cells.findIndex(
       (cell) => cell.id === selection.anchorCellId,
     )
-    const focusIndex = strip.cells.findIndex(
+    const focusIndex = row.cells.findIndex(
       (cell) => cell.id === selection.focusCellId,
     )
     if (anchorIndex < 0 || focusIndex < 0) return undefined
@@ -155,9 +183,10 @@ export function App() {
     const endIndex = Math.max(anchorIndex, focusIndex)
     return {
       stripId: strip.id,
+      rowId: row.id,
       startIndex,
       endIndex,
-      cellIds: strip.cells
+      cellIds: row.cells
         .slice(startIndex, endIndex + 1)
         .map((cell) => cell.id),
     }
@@ -167,24 +196,41 @@ export function App() {
       resolvedSelection?.cellIds.length === 1
         ? project.strips
             .find((strip) => strip.id === resolvedSelection.stripId)
+            ?.rows.find((row) => row.id === resolvedSelection.rowId)
             ?.cells[resolvedSelection.startIndex]
         : undefined,
     [project.strips, resolvedSelection],
   )
   const selectedRangeLabel = useMemo(() => {
     if (!resolvedSelection) return undefined
+    const strip = project.strips.find(
+      (candidate) => candidate.id === resolvedSelection.stripId,
+    )
+    const rowIndex = strip?.rows.findIndex(
+      (row) => row.id === resolvedSelection.rowId,
+    ) ?? -1
     const start = resolvedSelection.startIndex + 1
     const end = resolvedSelection.endIndex + 1
-    return start === end ? `Cell ${start}` : `Cells ${start}–${end}`
-  }, [resolvedSelection])
+    const cells = start === end ? `Cell ${start}` : `Cells ${start}–${end}`
+    return strip && strip.rows.length > 1 && rowIndex >= 0
+      ? `Row ${rowIndex + 1} · ${cells}`
+      : cells
+  }, [project.strips, resolvedSelection])
   const selectedGroupHeader = useMemo(() => {
-    if (!activeStrip || !resolvedSelection) return undefined
-    return activeStrip.groupHeaders.find(
+    if (!activeRow || !resolvedSelection) return undefined
+    return activeRow.groupHeaders.find(
       (header) =>
         header.startCellIndex === resolvedSelection.startIndex &&
         header.endCellIndex === resolvedSelection.endIndex,
     )
-  }, [activeStrip, resolvedSelection])
+  }, [activeRow, resolvedSelection])
+  const joinError = useMemo(
+    () =>
+      selectedJoinStripIds.length > 0
+        ? getStripJoinError(project.strips, selectedJoinStripIds)
+        : undefined,
+    [project.strips, selectedJoinStripIds],
+  )
   const pendingDeleteStrip = useMemo(
     () =>
       project.strips.find((strip) => strip.id === pendingDeleteStripId),
@@ -237,12 +283,20 @@ export function App() {
     }))
   }
 
+  function updateRow(
+    stripId: string,
+    rowId: string,
+    updater: (row: LabelStripRow) => LabelStripRow,
+  ) {
+    updateStrip(stripId, (strip) => updateStripRow(strip, rowId, updater))
+  }
+
   function updateSelectedCell(updater: (cell: LabelCell) => LabelCell) {
     if (!resolvedSelection || resolvedSelection.cellIds.length !== 1) return
     const selectedCellId = resolvedSelection.cellIds[0]
-    updateStrip(resolvedSelection.stripId, (strip) => ({
-      ...strip,
-      cells: strip.cells.map((cell) =>
+    updateRow(resolvedSelection.stripId, resolvedSelection.rowId, (row) => ({
+      ...row,
+      cells: row.cells.map((cell) =>
         cell.id === selectedCellId ? updater(cell) : cell,
       ),
     }))
@@ -259,6 +313,8 @@ export function App() {
     const nextProject = createProject()
     setProject(nextProject)
     setActiveStripId(nextProject.strips[0]?.id)
+    setActiveRowId(nextProject.strips[0]?.rows[0]?.id)
+    setSelectedJoinStripIds([])
     clearSelection()
     setNotice({ kind: 'success', message: 'New project created.' })
   }
@@ -298,6 +354,8 @@ export function App() {
           )
         }
         setActiveStripId(importedProject.strips[0]?.id)
+        setActiveRowId(importedProject.strips[0]?.rows[0]?.id)
+        setSelectedJoinStripIds([])
         setSelection(undefined)
         setEditingCellId(undefined)
         setNotice({ kind: 'success', message: `Opened ${file.name}` })
@@ -430,7 +488,7 @@ export function App() {
     }
   }
 
-  function handleAddStrip() {
+  function handleAddStrip(rowCount: 1 | 2 | 3) {
     if (project.strips.length >= MAX_PROJECT_STRIPS) {
       setNotice({
         kind: 'error',
@@ -438,12 +496,30 @@ export function App() {
       })
       return
     }
-    const strip = createStrip(`Strip ${project.strips.length + 1}`)
+    const currentRowCount = project.strips.reduce(
+      (count, strip) => count + strip.rows.length,
+      0,
+    )
+    if (currentRowCount + rowCount > MAX_PROJECT_ROWS) {
+      setNotice({
+        kind: 'error',
+        message: `A project can contain at most ${MAX_PROJECT_ROWS} rows.`,
+      })
+      return
+    }
+    const strip = createStrip(
+      `Strip ${project.strips.length + 1}`,
+      432,
+      7.5,
+      16,
+      rowCount,
+    )
     updateProject((current) => ({
       ...current,
       strips: [...current.strips, strip],
     }))
     setActiveStripId(strip.id)
+    setActiveRowId(strip.rows[0]?.id)
     clearSelection()
   }
 
@@ -451,6 +527,24 @@ export function App() {
     const sourceIndex = project.strips.findIndex((strip) => strip.id === stripId)
     const source = project.strips[sourceIndex]
     if (!source) return
+    if (project.strips.length >= MAX_PROJECT_STRIPS) {
+      setNotice({
+        kind: 'error',
+        message: `A project can contain at most ${MAX_PROJECT_STRIPS} strips.`,
+      })
+      return
+    }
+    const currentRowCount = project.strips.reduce(
+      (count, strip) => count + strip.rows.length,
+      0,
+    )
+    if (currentRowCount + source.rows.length > MAX_PROJECT_ROWS) {
+      setNotice({
+        kind: 'error',
+        message: `A project can contain at most ${MAX_PROJECT_ROWS} rows.`,
+      })
+      return
+    }
 
     const copy = duplicateStrip(source, `${source.name} copy`)
     updateProject((current) => {
@@ -459,6 +553,7 @@ export function App() {
       return { ...current, strips }
     })
     setActiveStripId(copy.id)
+    setActiveRowId(copy.rows[0]?.id)
     clearSelection()
   }
 
@@ -470,8 +565,96 @@ export function App() {
     if (activeStripId === stripId) {
       const nextStrip = remaining[Math.min(sourceIndex, remaining.length - 1)]
       setActiveStripId(nextStrip?.id)
+      setActiveRowId(nextStrip?.rows[0]?.id)
     }
+    setSelectedJoinStripIds((current) =>
+      current.filter((selectedId) => selectedId !== stripId),
+    )
     if (selection?.stripId === stripId) clearSelection()
+  }
+
+  function handleToggleJoinSelection(stripId: string) {
+    setSelectedJoinStripIds((current) =>
+      current.includes(stripId)
+        ? current.filter((selectedId) => selectedId !== stripId)
+        : [...current, stripId],
+    )
+  }
+
+  function handleJoinStrips() {
+    if (joinError) return
+    const firstSelected = project.strips.find((strip) =>
+      selectedJoinStripIds.includes(strip.id),
+    )
+    if (!firstSelected) return
+    updateProject((current) => ({
+      ...current,
+      strips: joinStrips(current.strips, selectedJoinStripIds),
+    }))
+    setActiveStripId(firstSelected.id)
+    setActiveRowId(firstSelected.rows[0]?.id)
+    setSelectedJoinStripIds([])
+    clearSelection()
+    setNotice({
+      kind: 'success',
+      message: `Joined ${selectedJoinStripIds.length} strips into one ${selectedJoinStripIds.length}-part physical label.`,
+    })
+  }
+
+  function handleAddRow(stripId: string) {
+    const currentRowCount = project.strips.reduce(
+      (count, strip) => count + strip.rows.length,
+      0,
+    )
+    if (currentRowCount >= MAX_PROJECT_ROWS) {
+      setNotice({
+        kind: 'error',
+        message: `A project can contain at most ${MAX_PROJECT_ROWS} rows.`,
+      })
+      return
+    }
+    const source = project.strips.find((strip) => strip.id === stripId)
+    if (!source) return
+    const updated = addStripRow(source)
+    if (updated === source) return
+    updateProject((current) => ({
+      ...current,
+      strips: current.strips.map((strip) =>
+        strip.id === stripId ? updated : strip,
+      ),
+    }))
+    setActiveStripId(stripId)
+    setActiveRowId(updated.rows.at(-1)?.id)
+    clearSelection()
+  }
+
+  function handleSplitRows(stripId: string) {
+    const sourceIndex = project.strips.findIndex((strip) => strip.id === stripId)
+    const source = project.strips[sourceIndex]
+    if (!source || source.rows.length <= 1) return
+    if (project.strips.length - 1 + source.rows.length > MAX_PROJECT_STRIPS) {
+      setNotice({
+        kind: 'error',
+        message: `Splitting would exceed the project limit of ${MAX_PROJECT_STRIPS} strips.`,
+      })
+      return
+    }
+    const split = splitStripRows(source)
+    updateProject((current) => {
+      const strips = [...current.strips]
+      strips.splice(sourceIndex, 1, ...split)
+      return { ...current, strips }
+    })
+    setActiveStripId(split[0].id)
+    setActiveRowId(split[0].rows[0]?.id)
+    setSelectedJoinStripIds((current) =>
+      current.filter((selectedId) => selectedId !== stripId),
+    )
+    clearSelection()
+    setNotice({
+      kind: 'success',
+      message: `Split “${source.name}” into ${split.length} individual strips.`,
+    })
   }
 
   function handleMoveStrip(stripId: string, direction: -1 | 1) {
@@ -490,21 +673,33 @@ export function App() {
 
   function handleMoveCell(
     stripId: string,
+    rowId: string,
     cellId: string,
     direction: -1 | 1,
   ) {
     const flattenedCells = project.strips.flatMap((strip) =>
-      strip.cells.map((cell) => ({ stripId: strip.id, cellId: cell.id })),
+      strip.rows.flatMap((row) =>
+        row.cells.map((cell) => ({
+          stripId: strip.id,
+          rowId: row.id,
+          cellId: cell.id,
+        })),
+      ),
     )
     const currentIndex = flattenedCells.findIndex(
-      (item) => item.stripId === stripId && item.cellId === cellId,
+      (item) =>
+        item.stripId === stripId &&
+        item.rowId === rowId &&
+        item.cellId === cellId,
     )
     const next = flattenedCells[currentIndex + direction]
     if (!next) return
 
     setActiveStripId(next.stripId)
+    setActiveRowId(next.rowId)
     setSelection({
       stripId: next.stripId,
+      rowId: next.rowId,
       anchorCellId: next.cellId,
       focusCellId: next.cellId,
     })
@@ -513,12 +708,18 @@ export function App() {
 
   function handleSelectCell(
     stripId: string,
+    rowId: string,
     cellId: string,
     extendSelection: boolean,
   ) {
     setActiveStripId(stripId)
+    setActiveRowId(rowId)
 
-    if (extendSelection && selection?.stripId === stripId) {
+    if (
+      extendSelection &&
+      selection?.stripId === stripId &&
+      selection.rowId === rowId
+    ) {
       setSelection({ ...selection, focusCellId: cellId })
       setEditingCellId(undefined)
       return
@@ -526,6 +727,7 @@ export function App() {
 
     setSelection({
       stripId,
+      rowId,
       anchorCellId: cellId,
       focusCellId: cellId,
     })
@@ -534,12 +736,15 @@ export function App() {
 
   function handleSelectGroupHeader(
     stripId: string,
+    rowId: string,
     startCellId: string,
     endCellId: string,
   ) {
     setActiveStripId(stripId)
+    setActiveRowId(rowId)
     setSelection({
       stripId,
+      rowId,
       anchorCellId: startCellId,
       focusCellId: endCellId,
     })
@@ -547,10 +752,10 @@ export function App() {
   }
 
   function handleAddGroupHeader(text: string) {
-    if (!activeStrip || !resolvedSelection) return
+    if (!activeStrip || !activeRow || !resolvedSelection) return
     try {
-      updateStrip(activeStrip.id, (strip) =>
-        addGroupHeader(strip, resolvedSelection, text),
+      updateRow(activeStrip.id, activeRow.id, (row) =>
+        addGroupHeader(row, resolvedSelection, text),
       )
       setNotice({
         kind: 'success',
@@ -570,10 +775,10 @@ export function App() {
   function handleUpdateSelectedGroupHeader(
     updater: (header: GroupHeader) => GroupHeader,
   ) {
-    if (!activeStrip || !selectedGroupHeader) return
+    if (!activeStrip || !activeRow || !selectedGroupHeader) return
     try {
-      updateStrip(activeStrip.id, (strip) =>
-        updateGroupHeader(strip, selectedGroupHeader.id, updater),
+      updateRow(activeStrip.id, activeRow.id, (row) =>
+        updateGroupHeader(row, selectedGroupHeader.id, updater),
       )
     } catch (error) {
       setNotice({
@@ -587,9 +792,9 @@ export function App() {
   }
 
   function handleRemoveSelectedGroupHeader() {
-    if (!activeStrip || !selectedGroupHeader) return
-    updateStrip(activeStrip.id, (strip) =>
-      removeGroupHeader(strip, selectedGroupHeader.id),
+    if (!activeStrip || !activeRow || !selectedGroupHeader) return
+    updateRow(activeStrip.id, activeRow.id, (row) =>
+      removeGroupHeader(row, selectedGroupHeader.id),
     )
     setNotice({
       kind: 'success',
@@ -598,23 +803,23 @@ export function App() {
   }
 
   function handleApplyCellAppearance(appearance: Partial<CellAppearance>) {
-    if (!activeStrip || !resolvedSelection) return
-    updateStrip(activeStrip.id, (strip) =>
-      applyCellAppearanceToRange(strip, resolvedSelection, appearance),
+    if (!activeStrip || !activeRow || !resolvedSelection) return
+    updateRow(activeStrip.id, activeRow.id, (row) =>
+      applyCellAppearanceToRange(row, resolvedSelection, appearance),
     )
   }
 
   function handleShiftCellLightness(direction: 'lighter' | 'darker') {
-    if (!activeStrip || !resolvedSelection) return
-    updateStrip(activeStrip.id, (strip) =>
-      shiftCellRangeLightness(strip, resolvedSelection, direction),
+    if (!activeStrip || !activeRow || !resolvedSelection) return
+    updateRow(activeStrip.id, activeRow.id, (row) =>
+      shiftCellRangeLightness(row, resolvedSelection, direction),
     )
   }
 
   function handleResetSelectedCellStyle() {
-    if (!activeStrip || !resolvedSelection) return
-    updateStrip(activeStrip.id, (strip) =>
-      resetCellRangeStyle(strip, resolvedSelection),
+    if (!activeStrip || !activeRow || !resolvedSelection) return
+    updateRow(activeStrip.id, activeRow.id, (row) =>
+      resetCellRangeStyle(row, resolvedSelection),
     )
     setNotice({
       kind: 'success',
@@ -626,14 +831,15 @@ export function App() {
     if (
       !activeStripId ||
       !activeStrip ||
+      !activeRow ||
       !resolvedSelection ||
       resolvedSelection.stripId !== activeStripId
     ) {
       return
     }
 
-    updateStrip(activeStripId, (strip) =>
-      applyAutoNumberingToRange(strip, resolvedSelection),
+    updateRow(activeStripId, activeRow.id, (row) =>
+      applyAutoNumberingToRange(row, resolvedSelection),
     )
     setEditingCellId(undefined)
     setNotice({
@@ -643,12 +849,12 @@ export function App() {
   }
 
   function handleApplyAutoNumberingToAll() {
-    if (!activeStripId || !activeStrip) return
-    updateStrip(activeStripId, (strip) => applyAutoNumbering(strip))
+    if (!activeStripId || !activeStrip || !activeRow) return
+    updateRow(activeStripId, activeRow.id, (row) => applyAutoNumbering(row))
     setEditingCellId(undefined)
     setNotice({
       kind: 'success',
-      message: `Applied numbering to all ${activeStrip.dimensions.cellCount} cells in “${activeStrip.name}”.`,
+      message: `Applied numbering to all ${activeRow.dimensions.cellCount} cells in row ${activeRowIndex + 1} of “${activeStrip.name}”.`,
     })
   }
 
@@ -656,14 +862,15 @@ export function App() {
     if (
       !activeStripId ||
       !activeStrip ||
+      !activeRow ||
       !resolvedSelection ||
       resolvedSelection.stripId !== activeStripId
     ) {
       return
     }
 
-    updateStrip(activeStripId, (strip) =>
-      clearCellRangeContents(strip, resolvedSelection),
+    updateRow(activeStripId, activeRow.id, (row) =>
+      clearCellRangeContents(row, resolvedSelection),
     )
     setEditingCellId(undefined)
     setNotice({
@@ -818,13 +1025,17 @@ export function App() {
       <div className="app-body">
         <Sidebar
           activeStrip={activeStrip}
+          activeRow={activeRow}
+          activeRowIndex={Math.max(0, activeRowIndex)}
           selectedCell={selectedCell}
           selectedCellCount={resolvedSelection?.cellIds.length ?? 0}
           selectedRangeLabel={selectedRangeLabel}
           selectedRange={resolvedSelection}
           selectedGroupHeader={selectedGroupHeader}
-          onUpdateStrip={(updater) => {
-            if (activeStripId) updateStrip(activeStripId, updater)
+          onUpdateRow={(updater) => {
+            if (activeStripId && activeRowId) {
+              updateRow(activeStripId, activeRowId, updater)
+            }
           }}
           onUpdateCell={updateSelectedCell}
           onAddGroupHeader={handleAddGroupHeader}
@@ -846,7 +1057,11 @@ export function App() {
           pageLayoutPlan={pageLayout.plan}
           pageLayoutError={pageLayout.error}
           activeStripId={activeStripId}
+          activeRowId={activeRowId}
+          selectedJoinStripIds={selectedJoinStripIds}
+          joinError={joinError}
           selectedCellIds={resolvedSelection?.cellIds ?? []}
+          selectedCellCount={resolvedSelection?.cellIds.length ?? 0}
           editingCellId={editingCellId}
           selectionLabel={selectedRangeLabel}
           previewScale={previewScale}
@@ -855,6 +1070,10 @@ export function App() {
           onActivateStrip={(stripId) => {
             if (stripId !== activeStripId) {
               setActiveStripId(stripId)
+              setActiveRowId(
+                project.strips.find((strip) => strip.id === stripId)?.rows[0]
+                  ?.id,
+              )
               clearSelection()
             }
           }}
@@ -864,16 +1083,20 @@ export function App() {
           onSelectCell={handleSelectCell}
           onSelectGroupHeader={handleSelectGroupHeader}
           onClearSelection={clearSelection}
-          onChangeCellText={(stripId, cellId, line1, line2) =>
-            updateStrip(stripId, (strip) => ({
-              ...strip,
-              cells: strip.cells.map((cell) =>
+          onChangeCellText={(stripId, rowId, cellId, line1, line2) =>
+            updateRow(stripId, rowId, (row) => ({
+              ...row,
+              cells: row.cells.map((cell) =>
                 cell.id === cellId ? { ...cell, line1, line2 } : cell,
               ),
             }))
           }
           onMoveCell={handleMoveCell}
           onAddStrip={handleAddStrip}
+          onToggleJoinSelection={handleToggleJoinSelection}
+          onJoinStrips={handleJoinStrips}
+          onAddRow={handleAddRow}
+          onSplitRows={handleSplitRows}
           onDuplicateStrip={handleDuplicateStrip}
           onDeleteStrip={setPendingDeleteStripId}
           onMoveStrip={handleMoveStrip}

@@ -7,11 +7,30 @@ import {
   SUPPORT_URL,
 } from '../src/config/app-info'
 import packageMetadata from '../package.json'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { AboutDialog } from '../src/components/AboutDialog'
 
 describe('beta application information', () => {
   it('exposes package version and a build-injected ISO date', () => {
     expect(APP_VERSION).toBe(packageMetadata.version)
     expect(BUILD_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('shows the current and previous beta changelog without a startup modal', () => {
+    const markup = renderToStaticMarkup(
+      AboutDialog({
+        installPromptAvailable: false,
+        onInstallApp: () => undefined,
+        onClose: () => undefined,
+      }),
+    )
+
+    expect(markup).toContain(`v${packageMetadata.version}`)
+    expect(markup).toContain('Multi-row strips')
+    expect(markup).toContain('Join and split rows')
+    expect(markup).toContain('Smarter crop/cut-marker handling')
+    expect(markup).toContain('v0.7.0-beta')
+    expect(markup).toContain('SRA3 support')
   })
 
   it('builds a privacy-safe diagnostic feedback draft', () => {

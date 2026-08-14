@@ -7,7 +7,7 @@ import {
   insertNumberPlaceholder,
   replaceNumberPlaceholder,
 } from '../src/lib/auto-numbering'
-import { createStrip } from '../src/model/defaults'
+import { createStripRow } from '../src/model/defaults'
 
 describe('auto numbering', () => {
   it('inserts the {n} token at the cursor or appends without a cursor', () => {
@@ -26,7 +26,7 @@ describe('auto numbering', () => {
   })
 
   it('keeps neutral numbering defaults unapplied in empty new strips', () => {
-    const strip = createStrip()
+    const strip = createStripRow()
     expect(strip.autoNumbering.line1Template).toBe('Router Out')
     expect(strip.autoNumbering.line2Template).toBe('{n}')
     expect(strip.cells.every((cell) => cell.line1 === '')).toBe(true)
@@ -38,7 +38,7 @@ describe('auto numbering', () => {
   })
 
   it('pads and applies a sequence to both lines', () => {
-    const strip = createStrip('Audio inputs', 108, 7.5, 4)
+    const strip = createStripRow('Audio inputs', 108, 7.5, 4)
     strip.autoNumbering = {
       line1Template: 'Router Main',
       line2Template: 'Audio IN {n}',
@@ -58,7 +58,7 @@ describe('auto numbering', () => {
   })
 
   it('replaces placeholders anywhere and preserves cell IDs and styles', () => {
-    const strip = createStrip('Cameras', 81, 7.5, 3)
+    const strip = createStripRow('Cameras', 81, 7.5, 3)
     strip.autoNumbering = {
       line1Template: 'CAM {n} / backup {n}',
       line2Template: 'Router IN {n}',
@@ -83,7 +83,7 @@ describe('auto numbering', () => {
   })
 
   it('applies to cells 1–4 without changing cells outside the range', () => {
-    const strip = createStrip('Grouped routing', 432, 7.5, 16)
+    const strip = createStripRow('Grouped routing', 432, 7.5, 16)
     const untouchedCells = strip.cells.slice(4).map((cell) => ({ ...cell }))
     const numbered = applyAutoNumberingToRange(
       strip,
@@ -107,7 +107,7 @@ describe('auto numbering', () => {
   })
 
   it('applies a second template to cells 5–8 while preserving cells 1–4', () => {
-    const strip = createStrip('Grouped routing', 432, 7.5, 16)
+    const strip = createStripRow('Grouped routing', 432, 7.5, 16)
     const firstGroup = applyAutoNumberingToRange(
       strip,
       { startIndex: 0, endIndex: 3 },
@@ -145,7 +145,7 @@ describe('auto numbering', () => {
   })
 
   it('restarts numbering from the configured start for every range', () => {
-    const strip = createStrip('AES groups', 432, 7.5, 16)
+    const strip = createStripRow('AES groups', 432, 7.5, 16)
     const first = applyAutoNumberingToRange(
       strip,
       { startIndex: 8, endIndex: 11 },
@@ -184,7 +184,7 @@ describe('auto numbering', () => {
   })
 
   it('preserves cell IDs and styles when numbering or clearing a range', () => {
-    const strip = createStrip('Preserve metadata', 432, 7.5, 16)
+    const strip = createStripRow('Preserve metadata', 432, 7.5, 16)
     strip.cells[5].style = {
       alignment: 'right',
       fontSizePt: 8,

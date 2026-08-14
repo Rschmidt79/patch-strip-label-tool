@@ -1,13 +1,21 @@
 import {
   fitFontSizePt,
   getCellWidthMm,
+  getStripRowTopOffsetsMm,
+  getStripTotalHeightMm,
+  getStripWidthMm,
   MM_PER_POINT,
 } from '../lib/dimensions'
 import {
   getCellContentGeometryMm,
   getGroupHeaderGeometryMm,
 } from '../lib/group-headers'
-import type { GroupHeader, LabelCell, LabelStrip } from '../model/project'
+import type {
+  GroupHeader,
+  LabelCell,
+  LabelStrip,
+  LabelStripRow,
+} from '../model/project'
 
 interface SvgCellTextProps {
   cell: LabelCell
@@ -87,13 +95,13 @@ function SvgCellText({
 }
 
 function GroupHeaderText({
-  strip,
+  row,
   header,
 }: {
-  strip: LabelStrip
+  row: LabelStripRow
   header: GroupHeader
 }) {
-  const geometry = getGroupHeaderGeometryMm(strip, header)
+  const geometry = getGroupHeaderGeometryMm(row, header)
   const horizontalPaddingMm = Math.min(1.25, geometry.widthMm * 0.06)
   const availableWidthMm = Math.max(
     0.5,
@@ -143,16 +151,16 @@ function GroupHeaderText({
   )
 }
 
-export function StripArtwork({
-  strip,
+export function StripRowArtwork({
+  row,
   hiddenCellIds = [],
 }: {
-  strip: LabelStrip
+  row: LabelStripRow
   hiddenCellIds?: readonly string[]
 }) {
-  const widthMm = strip.dimensions.widthMm
-  const totalHeightMm = strip.dimensions.heightMm
-  const cellWidthMm = getCellWidthMm(strip)
+  const widthMm = row.dimensions.widthMm
+  const totalHeightMm = row.dimensions.heightMm
+  const cellWidthMm = getCellWidthMm(row)
 
   return (
     <g className="strip-artwork">
@@ -164,9 +172,9 @@ export function StripArtwork({
         fill="#ffffff"
       />
 
-      {strip.cells.map((cell, index) => {
+      {row.cells.map((cell, index) => {
         const cellX = index * cellWidthMm
-        const contentGeometry = getCellContentGeometryMm(strip, index)
+        const contentGeometry = getCellContentGeometryMm(row, index)
         const contentTopMm =
           totalHeightMm - contentGeometry.yMm - contentGeometry.heightMm
         return (
@@ -193,8 +201,8 @@ export function StripArtwork({
         )
       })}
 
-      {strip.groupHeaders.map((header) => {
-        const geometry = getGroupHeaderGeometryMm(strip, header)
+      {row.groupHeaders.map((header) => {
+        const geometry = getGroupHeaderGeometryMm(row, header)
         const headerTopMm =
           totalHeightMm - geometry.yMm - geometry.heightMm
         return (
@@ -208,11 +216,35 @@ export function StripArtwork({
               stroke="#101418"
               strokeWidth={0.12}
             />
-            <GroupHeaderText strip={strip} header={header} />
+            <GroupHeaderText row={row} header={header} />
           </g>
         )
       })}
+    </g>
+  )
+}
 
+export function StripArtwork({
+  strip,
+  hiddenCellIds = [],
+}: {
+  strip: LabelStrip
+  hiddenCellIds?: readonly string[]
+}) {
+  const widthMm = getStripWidthMm(strip)
+  const totalHeightMm = getStripTotalHeightMm(strip)
+  const rowTopOffsetsMm = getStripRowTopOffsetsMm(strip)
+
+  return (
+    <g className="strip-block-artwork">
+      {strip.rows.map((row, index) => (
+        <g
+          key={row.id}
+          transform={`translate(0 ${rowTopOffsetsMm[index]})`}
+        >
+          <StripRowArtwork row={row} hiddenCellIds={hiddenCellIds} />
+        </g>
+      ))}
       <rect
         x={0.09}
         y={0.09}

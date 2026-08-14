@@ -13,7 +13,9 @@ import { planPrintLayout } from '../src/lib/print-layout'
 import {
   CROP_MARK_LENGTH_MM,
   CROP_MARK_OFFSET_MM,
+  segmentEntersPolygonInteriorMm,
 } from '../src/lib/cut-guides'
+import { getPlacementPolygonMm } from '../src/lib/pdf-layout'
 import { DEFAULT_PRINT_PREFERENCES } from '../src/lib/print-preferences'
 import { createProject, createStrip } from '../src/model/defaults'
 import {
@@ -81,6 +83,69 @@ describe('shared print layout plan', () => {
         expect(point.xMm).toBeLessThanOrEqual(plan.pageWidthMm)
         expect(point.yMm).toBeGreaterThanOrEqual(0)
         expect(point.yMm).toBeLessThanOrEqual(plan.pageHeightMm)
+      }
+    }
+  })
+
+  it('suppresses crop marks that would cross tightly packed 19-inch labels on A3', () => {
+    const project = createProject()
+    project.strips = Array.from({ length: 12 }, (_, index) =>
+      createStrip(`19-inch ${index + 1}`, 432, 7.5, 12),
+    )
+    const plan = planPrintLayout(project, {
+      ...DEFAULT_PRINT_PREFERENCES,
+      paperSize: 'A3',
+      orientation: 'landscape',
+      spacingMode: 'edge-to-edge',
+    })
+    const firstPagePlacements = plan.placements.filter(
+      (placement) => placement.pageIndex === 0,
+    )
+    const polygons = firstPagePlacements.map(getPlacementPolygonMm)
+    const marks = plan.pageGuides[0].cropMarks
+
+    expect(firstPagePlacements).toHaveLength(12)
+    expect(marks.length).toBeLessThan(firstPagePlacements.length * 8)
+    for (const mark of marks) {
+      expect(
+        polygons.some((polygon) =>
+          segmentEntersPolygonInteriorMm(mark, polygon),
+        ),
+      ).toBe(false)
+    }
+  })
+
+  it('keeps diagonal and multi-row crop marks outside every physical label polygon', () => {
+    const project = createProject()
+    project.strips = Array.from({ length: 7 }, (_, index) =>
+      createStrip(`Three-row 19-inch ${index + 1}`, 432, 7.5, 12, 3),
+    )
+    const plan = planPrintLayout(project, {
+      ...DEFAULT_PRINT_PREFERENCES,
+      paperSize: 'A3',
+      orientation: 'landscape',
+      spacingMode: 'edge-to-edge',
+    })
+
+    expect(
+      plan.placements.some(
+        (placement) =>
+          placement.rotationDegrees > 0 && placement.rotationDegrees < 90,
+      ),
+    ).toBe(true)
+    expect(plan.placements.every((placement) => placement.heightMm === 22.5)).toBe(
+      true,
+    )
+    for (const guides of plan.pageGuides) {
+      const polygons = plan.placements
+        .filter((placement) => placement.pageIndex === guides.pageIndex)
+        .map(getPlacementPolygonMm)
+      for (const mark of guides.cropMarks) {
+        expect(
+          polygons.some((polygon) =>
+            segmentEntersPolygonInteriorMm(mark, polygon),
+          ),
+        ).toBe(false)
       }
     }
   })

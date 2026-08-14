@@ -457,21 +457,23 @@ describe('PDF layout and generation', () => {
 
   it('keeps group-header vectors inside the fixed 7.5 mm PDF strip', async () => {
     const project = createProject()
-    let strip = applyCellAppearanceToRange(
-      createStrip('Styled groups', 432, 7.5, 12),
+    const strip = createStrip('Styled groups', 432, 7.5, 12)
+    let row = applyCellAppearanceToRange(
+      strip.rows[0],
       { startIndex: 0, endIndex: 5 },
       { backgroundColor: '#3973b9', textColor: '#ffffff' },
     )
-    strip = addGroupHeader(
-      strip,
+    row = addGroupHeader(
+      row,
       { startIndex: 0, endIndex: 5 },
       'GROUP HEADER MICS',
     )
-    strip = addGroupHeader(
-      strip,
+    row = addGroupHeader(
+      row,
       { startIndex: 6, endIndex: 11 },
       'GROUP HEADER LINE',
     )
+    strip.rows[0] = row
     project.strips = [strip]
 
     const plan = planPdfLayout(project)

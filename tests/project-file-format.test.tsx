@@ -98,7 +98,7 @@ describe('canonical project file loading', () => {
 
     expect(racklabel).toEqual(legacyJson)
     expect(racklabel.project).toEqual(project)
-    expect(racklabel.project.schemaVersion).toBe(3)
+    expect(racklabel.project.schemaVersion).toBe(5)
   })
 
   it('reports invalid JSON and invalid schemas for either extension', async () => {

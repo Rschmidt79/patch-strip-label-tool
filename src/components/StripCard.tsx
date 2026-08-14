@@ -3,16 +3,21 @@ import {
   formatMillimeters,
   getCellWidthMm,
   getStripTotalHeightMm,
+  getStripWidthMm,
 } from '../lib/dimensions'
 import type { LabelStrip } from '../model/project'
 import { MAX_NAME_LENGTH } from '../config/content-limits'
+import { MAX_ROWS_PER_STRIP } from '../config/content-limits'
 import { StripSvgEditor } from './StripSvgEditor'
 
 interface StripCardProps {
   strip: LabelStrip
   index: number
   isActive: boolean
+  activeRowId: string | undefined
+  isSelectedForJoin: boolean
   selectedCellIds: readonly string[]
+  selectedCellCount: number
   editingCellId: string | undefined
   selectionLabel: string | undefined
   previewScale: number
@@ -20,11 +25,27 @@ interface StripCardProps {
   canMoveDown: boolean
   onActivate: () => void
   onRename: (name: string) => void
-  onSelectCell: (cellId: string, extendSelection: boolean) => void
-  onSelectGroupHeader: (startCellId: string, endCellId: string) => void
+  onSelectCell: (
+    rowId: string,
+    cellId: string,
+    extendSelection: boolean,
+  ) => void
+  onSelectGroupHeader: (
+    rowId: string,
+    startCellId: string,
+    endCellId: string,
+  ) => void
   onClearSelection: () => void
-  onChangeCellText: (cellId: string, line1: string, line2: string) => void
-  onMoveCell: (cellId: string, direction: -1 | 1) => void
+  onChangeCellText: (
+    rowId: string,
+    cellId: string,
+    line1: string,
+    line2: string,
+  ) => void
+  onMoveCell: (rowId: string, cellId: string, direction: -1 | 1) => void
+  onToggleJoinSelection: () => void
+  onAddRow: () => void
+  onSplitRows: () => void
   onDuplicate: () => void
   onDelete: () => void
   onMoveStrip: (direction: -1 | 1) => void
@@ -34,7 +55,10 @@ export function StripCard({
   strip,
   index,
   isActive,
+  activeRowId,
+  isSelectedForJoin,
   selectedCellIds,
+  selectedCellCount,
   editingCellId,
   selectionLabel,
   previewScale,
@@ -47,14 +71,19 @@ export function StripCard({
   onClearSelection,
   onChangeCellText,
   onMoveCell,
+  onToggleJoinSelection,
+  onAddRow,
+  onSplitRows,
   onDuplicate,
   onDelete,
   onMoveStrip,
 }: StripCardProps) {
-  const cellWidthMm = getCellWidthMm(strip)
+  const activeRow =
+    strip.rows.find((row) => row.id === activeRowId) ?? strip.rows[0]
+  const cellWidthMm = activeRow ? getCellWidthMm(activeRow) : 0
+  const widthMm = getStripWidthMm(strip)
   const totalHeightMm = getStripTotalHeightMm(strip)
-  const previewWidthPx =
-    strip.dimensions.widthMm * CSS_PX_PER_MM * previewScale
+  const previewWidthPx = widthMm * CSS_PX_PER_MM * previewScale
 
   return (
     <article
@@ -73,16 +102,33 @@ export function StripCard({
               aria-label={`Name of strip ${index + 1}`}
             />
             <p>
-              {formatMillimeters(strip.dimensions.widthMm)} ×{' '}
+              {formatMillimeters(widthMm)} ×{' '}
               {formatMillimeters(totalHeightMm)} mm
               <span>·</span>
-              {strip.dimensions.cellCount} cells ×{' '}
-              {formatMillimeters(cellWidthMm)} mm
+              {strip.rows.length} {strip.rows.length === 1 ? 'row' : 'rows'}
+              {activeRow && (
+                <>
+                  <span>·</span>
+                  active row: {activeRow.dimensions.cellCount} cells ×{' '}
+                  {formatMillimeters(cellWidthMm)} mm
+                </>
+              )}
             </p>
           </div>
         </div>
 
         <div className="strip-actions">
+          <label
+            className="join-strip-toggle"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={isSelectedForJoin}
+              onChange={onToggleJoinSelection}
+            />
+            Join
+          </label>
           <button
             className="icon-button"
             onClick={() => onMoveStrip(-1)}
@@ -104,6 +150,18 @@ export function StripCard({
           <button className="button button-small" onClick={onDuplicate}>
             Duplicate
           </button>
+          <button
+            className="button button-small"
+            onClick={onAddRow}
+            disabled={strip.rows.length >= MAX_ROWS_PER_STRIP}
+          >
+            Add row
+          </button>
+          {strip.rows.length > 1 && (
+            <button className="button button-small" onClick={onSplitRows}>
+              Split rows
+            </button>
+          )}
           <button className="button button-small button-danger" onClick={onDelete}>
             Delete strip
           </button>
@@ -117,11 +175,12 @@ export function StripCard({
           aria-hidden="true"
         >
           <span>0</span>
-          <span>{formatMillimeters(strip.dimensions.widthMm / 2, 1)} mm</span>
-          <span>{formatMillimeters(strip.dimensions.widthMm, 1)} mm</span>
+          <span>{formatMillimeters(widthMm / 2, 1)} mm</span>
+          <span>{formatMillimeters(widthMm, 1)} mm</span>
         </div>
         <StripSvgEditor
           strip={strip}
+          activeRowId={activeRowId}
           selectedCellIds={selectedCellIds}
           editingCellId={editingCellId}
           previewScale={previewScale}
@@ -135,13 +194,15 @@ export function StripCard({
 
       <footer className="strip-card-footer">
         <span className="dimension-status">
-          <i /> SVG geometry: {formatMillimeters(strip.dimensions.widthMm)} ×{' '}
+          <i /> SVG geometry: {formatMillimeters(widthMm)} ×{' '}
           {formatMillimeters(totalHeightMm)} mm
         </span>
         <span>
-          {selectionLabel
-            ? `Selected: ${selectionLabel} · Shift-click extends range`
-            : 'Click to edit · Shift-click selects range · Tab moves cell'}
+          {selectionLabel && selectedCellCount === 1
+            ? 'Shift-click another cell in this row to select a range'
+            : selectionLabel
+              ? `Selected: ${selectionLabel} · Actions and formatting apply to this range`
+              : 'Click to edit · Shift-click selects a range · Tab moves cell'}
         </span>
       </footer>
     </article>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { LabelProject, LabelStrip } from '../model/project'
 import type { PrintLayoutPlan } from '../lib/print-layout'
 import type { PrintPreferences } from '../lib/print-preferences'
@@ -11,7 +12,11 @@ interface WorkspaceProps {
   pageLayoutPlan: PrintLayoutPlan | undefined
   pageLayoutError: string | undefined
   activeStripId: string | undefined
+  activeRowId: string | undefined
+  selectedJoinStripIds: readonly string[]
+  joinError: string | undefined
   selectedCellIds: readonly string[]
+  selectedCellCount: number
   editingCellId: string | undefined
   selectionLabel: string | undefined
   previewScale: number
@@ -21,23 +26,35 @@ interface WorkspaceProps {
   onRenameStrip: (stripId: string, name: string) => void
   onSelectCell: (
     stripId: string,
+    rowId: string,
     cellId: string,
     extendSelection: boolean,
   ) => void
   onSelectGroupHeader: (
     stripId: string,
+    rowId: string,
     startCellId: string,
     endCellId: string,
   ) => void
   onClearSelection: () => void
   onChangeCellText: (
     stripId: string,
+    rowId: string,
     cellId: string,
     line1: string,
     line2: string,
   ) => void
-  onMoveCell: (stripId: string, cellId: string, direction: -1 | 1) => void
-  onAddStrip: () => void
+  onMoveCell: (
+    stripId: string,
+    rowId: string,
+    cellId: string,
+    direction: -1 | 1,
+  ) => void
+  onAddStrip: (rowCount: 1 | 2 | 3) => void
+  onToggleJoinSelection: (stripId: string) => void
+  onJoinStrips: () => void
+  onAddRow: (stripId: string) => void
+  onSplitRows: (stripId: string) => void
   onDuplicateStrip: (stripId: string) => void
   onDeleteStrip: (stripId: string) => void
   onMoveStrip: (stripId: string, direction: -1 | 1) => void
@@ -50,7 +67,11 @@ export function Workspace({
   pageLayoutPlan,
   pageLayoutError,
   activeStripId,
+  activeRowId,
+  selectedJoinStripIds,
+  joinError,
   selectedCellIds,
+  selectedCellCount,
   editingCellId,
   selectionLabel,
   previewScale,
@@ -64,10 +85,16 @@ export function Workspace({
   onChangeCellText,
   onMoveCell,
   onAddStrip,
+  onToggleJoinSelection,
+  onJoinStrips,
+  onAddRow,
+  onSplitRows,
   onDuplicateStrip,
   onDeleteStrip,
   onMoveStrip,
 }: WorkspaceProps) {
+  const [newStripRowCount, setNewStripRowCount] = useState<1 | 2 | 3>(1)
+
   return (
     <main className="workspace">
       <div className="workspace-heading">
@@ -92,14 +119,34 @@ export function Workspace({
       </div>
 
       <div className="strip-list">
+        {selectedJoinStripIds.length > 0 && (
+          <div className="strip-join-bar" role="status">
+            <span>
+              {selectedJoinStripIds.length} selected for joining
+              {joinError ? ` · ${joinError}` : ' · Order follows the editor'}
+            </span>
+            <button
+              className="button button-small button-primary"
+              disabled={joinError !== undefined}
+              onClick={onJoinStrips}
+            >
+              Join strips
+            </button>
+          </div>
+        )}
         {strips.map((strip, index) => (
           <StripCard
             key={strip.id}
             strip={strip}
             index={index}
             isActive={strip.id === activeStripId}
+            activeRowId={strip.id === activeStripId ? activeRowId : undefined}
+            isSelectedForJoin={selectedJoinStripIds.includes(strip.id)}
             selectedCellIds={
               strip.id === activeStripId ? selectedCellIds : []
+            }
+            selectedCellCount={
+              strip.id === activeStripId ? selectedCellCount : 0
             }
             editingCellId={
               strip.id === activeStripId ? editingCellId : undefined
@@ -112,19 +159,22 @@ export function Workspace({
             canMoveDown={index < strips.length - 1}
             onActivate={() => onActivateStrip(strip.id)}
             onRename={(name) => onRenameStrip(strip.id, name)}
-            onSelectCell={(cellId, extendSelection) =>
-              onSelectCell(strip.id, cellId, extendSelection)
+            onSelectCell={(rowId, cellId, extendSelection) =>
+              onSelectCell(strip.id, rowId, cellId, extendSelection)
             }
-            onSelectGroupHeader={(startCellId, endCellId) =>
-              onSelectGroupHeader(strip.id, startCellId, endCellId)
+            onSelectGroupHeader={(rowId, startCellId, endCellId) =>
+              onSelectGroupHeader(strip.id, rowId, startCellId, endCellId)
             }
             onClearSelection={onClearSelection}
-            onChangeCellText={(cellId, line1, line2) =>
-              onChangeCellText(strip.id, cellId, line1, line2)
+            onChangeCellText={(rowId, cellId, line1, line2) =>
+              onChangeCellText(strip.id, rowId, cellId, line1, line2)
             }
-            onMoveCell={(cellId, direction) =>
-              onMoveCell(strip.id, cellId, direction)
+            onMoveCell={(rowId, cellId, direction) =>
+              onMoveCell(strip.id, rowId, cellId, direction)
             }
+            onToggleJoinSelection={() => onToggleJoinSelection(strip.id)}
+            onAddRow={() => onAddRow(strip.id)}
+            onSplitRows={() => onSplitRows(strip.id)}
             onDuplicate={() => onDuplicateStrip(strip.id)}
             onDelete={() => onDeleteStrip(strip.id)}
             onMoveStrip={(direction) => onMoveStrip(strip.id, direction)}
@@ -140,7 +190,23 @@ export function Workspace({
             </div>
             <h2>No label strips yet</h2>
             <p>Add a strip to start laying out rack labels.</p>
-            <button className="button button-primary" onClick={onAddStrip}>
+            <label className="add-strip-rows-field">
+              <span>Rows</span>
+              <select
+                value={newStripRowCount}
+                onChange={(event) =>
+                  setNewStripRowCount(Number(event.target.value) as 1 | 2 | 3)
+                }
+              >
+                <option value={1}>1 row</option>
+                <option value={2}>2 rows</option>
+                <option value={3}>3 rows</option>
+              </select>
+            </label>
+            <button
+              className="button button-primary"
+              onClick={() => onAddStrip(newStripRowCount)}
+            >
               Add first strip
             </button>
           </div>
@@ -149,9 +215,28 @@ export function Workspace({
 
       {strips.length > 0 && (
         <>
-          <button className="add-strip-button" onClick={onAddStrip}>
-            <span>+</span> Add strip
-          </button>
+          <div className="add-strip-controls">
+            <label className="add-strip-rows-field">
+              <span>New strip</span>
+              <select
+                aria-label="Rows in new strip"
+                value={newStripRowCount}
+                onChange={(event) =>
+                  setNewStripRowCount(Number(event.target.value) as 1 | 2 | 3)
+                }
+              >
+                <option value={1}>1 row</option>
+                <option value={2}>2 rows</option>
+                <option value={3}>3 rows</option>
+              </select>
+            </label>
+            <button
+              className="add-strip-button"
+              onClick={() => onAddStrip(newStripRowCount)}
+            >
+              <span>+</span> Add strip
+            </button>
+          </div>
           <PageLayoutPreview
             project={project}
             preferences={printPreferences}

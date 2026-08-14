@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { STRIP_PRESETS } from '../src/config/presets'
 import { getCellWidthMm } from '../src/lib/dimensions'
-import { createStrip } from '../src/model/defaults'
+import { createStripRow } from '../src/model/defaults'
 
 describe('full-width rack presets', () => {
   it('provides all common cell counts at exactly 432 mm total width', () => {
@@ -18,13 +18,13 @@ describe('full-width rack presets', () => {
   })
 
   it('uses the exact 432 / 7 cell geometry without display rounding', () => {
-    const strip = createStrip('Seven cells', 432, 7.5, 7)
+    const strip = createStripRow('Seven cells', 432, 7.5, 7)
     expect(getCellWidthMm(strip)).toBe(432 / 7)
     expect(getCellWidthMm(strip) * strip.dimensions.cellCount).toBe(432)
   })
 
   it('produces exactly 21.6 mm cells for the 20-cell layout', () => {
-    const strip = createStrip('Twenty cells', 432, 7.5, 20)
+    const strip = createStripRow('Twenty cells', 432, 7.5, 20)
     expect(getCellWidthMm(strip)).toBe(21.6)
   })
 })

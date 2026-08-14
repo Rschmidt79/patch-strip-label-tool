@@ -1,5 +1,5 @@
 import { DEFAULT_GROUP_HEADER_STYLE, createId } from '../model/defaults'
-import type { GroupHeader, LabelStrip } from '../model/project'
+import type { GroupHeader, LabelStripRow } from '../model/project'
 import { getCellWidthMm, getGroupHeaderBandHeightMm } from './dimensions'
 import { isValidCellRange, type CellRange } from './cell-range'
 
@@ -31,7 +31,7 @@ export function groupHeaderRangesOverlap(
   )
 }
 
-function assertValidRange(strip: LabelStrip, range: CellRange): void {
+function assertValidRange(strip: LabelStripRow, range: CellRange): void {
   if (!isValidCellRange(strip.cells.length, range)) {
     throw new GroupHeaderRangeError(
       `Group header range must stay within cells 1–${strip.cells.length}.`,
@@ -47,7 +47,7 @@ function getHeaderRange(header: GroupHeader): CellRange {
 }
 
 export function validateGroupHeaders(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   headers: readonly GroupHeader[] = strip.groupHeaders,
 ): void {
   headers.forEach((header) => {
@@ -73,10 +73,10 @@ export function validateGroupHeaders(
 }
 
 export function addGroupHeader(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   range: CellRange,
   text: string,
-): LabelStrip {
+): LabelStripRow {
   assertValidRange(strip, range)
   if (!text.trim()) {
     throw new GroupHeaderRangeError('Enter group header text before adding it.')
@@ -96,10 +96,10 @@ export function addGroupHeader(
 }
 
 export function updateGroupHeader(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   headerId: string,
   updater: (header: GroupHeader) => GroupHeader,
-): LabelStrip {
+): LabelStripRow {
   const groupHeaders = strip.groupHeaders.map((header) =>
     header.id === headerId ? updater(header) : header,
   )
@@ -108,9 +108,9 @@ export function updateGroupHeader(
 }
 
 export function removeGroupHeader(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   headerId: string,
-): LabelStrip {
+): LabelStripRow {
   return {
     ...strip,
     groupHeaders: strip.groupHeaders.filter((header) => header.id !== headerId),
@@ -118,7 +118,7 @@ export function removeGroupHeader(
 }
 
 export function getGroupHeaderGeometryMm(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   header: GroupHeader,
 ): GroupHeaderGeometryMm {
   const cellWidthMm = getCellWidthMm(strip)
@@ -134,7 +134,7 @@ export function getGroupHeaderGeometryMm(
 }
 
 export function getGroupHeaderForCellIndex(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   cellIndex: number,
 ): GroupHeader | undefined {
   return strip.groupHeaders.find(
@@ -144,7 +144,7 @@ export function getGroupHeaderForCellIndex(
 }
 
 export function getCellContentGeometryMm(
-  strip: LabelStrip,
+  strip: LabelStripRow,
   cellIndex: number,
 ): CellContentGeometryMm {
   const cellWidthMm = getCellWidthMm(strip)

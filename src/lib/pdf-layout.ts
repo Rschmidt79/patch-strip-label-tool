@@ -10,7 +10,7 @@ import type {
   PageSettings,
 } from '../model/project'
 import { getTotalSharedEdgeLengthMm } from './cut-guides'
-import { getStripTotalHeightMm } from './dimensions'
+import { getStripTotalHeightMm, getStripWidthMm } from './dimensions'
 import {
   degreesToRadians,
   findMinimumRotationToFitMm,
@@ -153,7 +153,7 @@ function getOrientationCandidates(
   strip: LabelStrip,
   usableArea: RectMm,
 ): OrientationCandidate[] {
-  const widthMm = strip.dimensions.widthMm
+  const widthMm = getStripWidthMm(strip)
   const heightMm = getStripTotalHeightMm(strip)
   const candidates: OrientationCandidate[] = []
 
@@ -266,7 +266,7 @@ function tryPlaceOnPage(
         pageIndex: page.pageIndex,
         xMm,
         yMm,
-        widthMm: strip.dimensions.widthMm,
+        widthMm: getStripWidthMm(strip),
         heightMm: getStripTotalHeightMm(strip),
         rotationDegrees: orientation.rotationDegrees,
         boundingWidthMm: orientation.boundingWidthMm,
@@ -315,14 +315,12 @@ function isDiagonalCandidate(orientation: { rotationDegrees: number }): boolean 
   )
 }
 
-function haveMatchingPhysicalSize(
+function haveMatchingPhysicalWidth(
   first: LabelStrip,
   second: LabelStrip,
 ): boolean {
   return (
-    Math.abs(first.dimensions.widthMm - second.dimensions.widthMm) <=
-      GEOMETRY_EPSILON_MM &&
-    Math.abs(getStripTotalHeightMm(first) - getStripTotalHeightMm(second)) <=
+    Math.abs(getStripWidthMm(first) - getStripWidthMm(second)) <=
       GEOMETRY_EPSILON_MM
   )
 }
@@ -439,7 +437,7 @@ function createPlacementFromLocalAxes(
   alongOriginMm: number,
   normalOriginMm: number,
 ): PdfStripPlacement {
-  const widthMm = strip.dimensions.widthMm
+  const widthMm = getStripWidthMm(strip)
   const heightMm = getStripTotalHeightMm(strip)
   const angleRadians = degreesToRadians(rotationDegrees)
   const cosine = Math.cos(angleRadians)
@@ -573,8 +571,10 @@ function getAlongOriginMm(
 }
 
 /**
- * Heuristic diagonal page packer for matching physical strips. It samples
- * rotation angles and lane offsets in the strip's local coordinate system.
+ * Heuristic diagonal page packer for strips with a matching physical width.
+ * It samples rotation angles and lane offsets in the strips' local coordinate
+ * system. Rows remain indivisible inside each placement, while differing block
+ * heights are accumulated across lanes so independent blocks can share a page.
  * Each lane independently chooses an along-axis origin, which permits the
  * staggered placements that conservative rotated bounding boxes reject.
  */
@@ -586,12 +586,11 @@ function createBestStaggeredDiagonalPlacements(
 ): PdfStripPlacement[] | undefined {
   const firstStrip = strips[0]
   if (!firstStrip || strips.length < 2) return undefined
-  const widthMm = firstStrip.dimensions.widthMm
-  const heightMm = getStripTotalHeightMm(firstStrip)
-  const lanePitchMm = heightMm + stripGapMm
+  const widthMm = getStripWidthMm(firstStrip)
+  const maximumHeightMm = Math.max(...strips.map(getStripTotalHeightMm))
   const rotations = getDiagonalRotationCandidates(
     widthMm,
-    heightMm,
+    maximumHeightMm,
     usableArea,
   )
   const alignments: AlongAxisAlignment[] = [
@@ -604,24 +603,49 @@ function createBestStaggeredDiagonalPlacements(
   let candidateOrder = 0
 
   for (const rotationDegrees of rotations) {
-    const normalRange = getFeasibleNormalOriginRangeMm(
-      widthMm,
-      heightMm,
-      rotationDegrees,
-      usableArea,
-    )
-    if (!normalRange) continue
-    const normalSpanMm = normalRange.maximumMm - normalRange.minimumMm
-    const laneCount = Math.min(
-      strips.length,
-      Math.floor(
-        (normalSpanMm + GEOMETRY_EPSILON_MM) / lanePitchMm,
-      ) + 1,
-    )
+    const laneOffsetsMm: number[] = []
+    let nextLaneOffsetMm = 0
+    let laneCount = 0
+    let normalStartRange: AxisIntervalMm | undefined
+
+    for (const strip of strips) {
+      const heightMm = getStripTotalHeightMm(strip)
+      const normalRange = getFeasibleNormalOriginRangeMm(
+        widthMm,
+        heightMm,
+        rotationDegrees,
+        usableArea,
+      )
+      if (!normalRange) break
+
+      const candidateStartRange: AxisIntervalMm = {
+        minimumMm: Math.max(
+          normalStartRange?.minimumMm ?? -Infinity,
+          normalRange.minimumMm - nextLaneOffsetMm,
+        ),
+        maximumMm: Math.min(
+          normalStartRange?.maximumMm ?? Infinity,
+          normalRange.maximumMm - nextLaneOffsetMm,
+        ),
+      }
+      if (
+        candidateStartRange.maximumMm <
+        candidateStartRange.minimumMm - GEOMETRY_EPSILON_MM
+      ) {
+        break
+      }
+
+      laneOffsetsMm.push(nextLaneOffsetMm)
+      laneCount += 1
+      normalStartRange = candidateStartRange
+      nextLaneOffsetMm += heightMm + stripGapMm
+    }
+
     if (laneCount < 2) continue
+    if (!normalStartRange) continue
     const offsetSlackMm = Math.max(
       0,
-      normalSpanMm - (laneCount - 1) * lanePitchMm,
+      normalStartRange.maximumMm - normalStartRange.minimumMm,
     )
     const offsetFractions = Array.from(
       { length: STAGGER_OFFSET_SAMPLE_COUNT + 1 },
@@ -630,16 +654,16 @@ function createBestStaggeredDiagonalPlacements(
 
     for (const offsetFraction of offsetFractions) {
       const normalStartMm =
-        normalRange.minimumMm + offsetSlackMm * offsetFraction
-      const alongRanges = Array.from({ length: laneCount }, (_, laneIndex) =>
-        getFeasibleAlongOriginRangeMm(
+        normalStartRange.minimumMm + offsetSlackMm * offsetFraction
+      const alongRanges = strips
+        .slice(0, laneCount)
+        .map((strip, laneIndex) => getFeasibleAlongOriginRangeMm(
           widthMm,
-          heightMm,
+          getStripTotalHeightMm(strip),
           rotationDegrees,
-          normalStartMm + laneIndex * lanePitchMm,
+          normalStartMm + laneOffsetsMm[laneIndex],
           usableArea,
-        ),
-      )
+        ))
       if (alongRanges.some((interval) => !interval)) continue
 
       for (const alignment of alignments) {
@@ -651,35 +675,13 @@ function createBestStaggeredDiagonalPlacements(
               alignment,
               laneIndex,
             ),
-            normalOriginMm: normalStartMm + laneIndex * lanePitchMm,
+            normalOriginMm: normalStartMm + laneOffsetsMm[laneIndex],
           }
-        })
-        const sortedSlots = slots.sort((left, right) => {
-          const leftPlacement = createPlacementFromLocalAxes(
-            firstStrip,
-            pageIndex,
-            rotationDegrees,
-            left.alongOriginMm,
-            left.normalOriginMm,
-          )
-          const rightPlacement = createPlacementFromLocalAxes(
-            firstStrip,
-            pageIndex,
-            rotationDegrees,
-            right.alongOriginMm,
-            right.normalOriginMm,
-          )
-          const topDifference =
-            rightPlacement.yMm + rightPlacement.boundingHeightMm -
-            (leftPlacement.yMm + leftPlacement.boundingHeightMm)
-          return Math.abs(topDifference) > GEOMETRY_EPSILON_MM
-            ? topDifference
-            : leftPlacement.xMm - rightPlacement.xMm
         })
         const placements = strips
           .slice(0, laneCount)
           .map((strip, index) => {
-            const slot = sortedSlots[index]
+            const slot = slots[index]
             return createPlacementFromLocalAxes(
               strip,
               pageIndex,
@@ -696,12 +698,16 @@ function createBestStaggeredDiagonalPlacements(
           xPositionsMm.reduce((total, value) => total + value, 0) /
           xPositionsMm.length
         const occupiedBoundsAreaMm2 = getOccupiedBoundsAreaMm2(placements)
+        const placedAreaMm2 = placements.reduce(
+          (areaMm2, placement) =>
+            areaMm2 + placement.widthMm * placement.heightMm,
+          0,
+        )
         const placementPolygons = placements.map(getPlacementPolygonMm)
         const score: StaggeredLayoutScore = {
           fittedCount: placements.length,
           wastedEnvelopeAreaMm2:
-            occupiedBoundsAreaMm2 -
-            placements.length * widthMm * heightMm,
+            occupiedBoundsAreaMm2 - placedAreaMm2,
           sharedEdgeLengthMm:
             stripGapMm <= GEOMETRY_EPSILON_MM
               ? getTotalSharedEdgeLengthMm(placementPolygons)
@@ -766,7 +772,7 @@ export function planPdfLayout(
     .map<PdfPlacementFailure>((strip) => ({
       stripId: strip.id,
       stripName: strip.name || 'Unnamed strip',
-      stripWidthMm: strip.dimensions.widthMm,
+      stripWidthMm: getStripWidthMm(strip),
       stripHeightMm: getStripTotalHeightMm(strip),
       availableWidthMm: usableArea.widthMm,
       availableHeightMm: usableArea.heightMm,
@@ -814,7 +820,7 @@ export function planPdfLayout(
             const candidateOrientations =
               orientationsByStrip.get(candidate.id) ?? []
             return (
-              haveMatchingPhysicalSize(strip, candidate) &&
+              haveMatchingPhysicalWidth(strip, candidate) &&
               candidateOrientations.length === 1 &&
               isDiagonalCandidate(candidateOrientations[0])
             )

@@ -19,6 +19,7 @@ import {
 } from '../config/pages'
 import {
   getCellWidthMm,
+  getStripRowTopOffsetsMm,
   millimetersToPoints,
 } from './dimensions'
 import { hexToRgb } from './colors'
@@ -394,9 +395,14 @@ function drawStrip(
   const transform = getPdfStripTransform(placement)
   const widthPt = millimetersToPoints(placement.widthMm)
   const heightPt = millimetersToPoints(placement.heightMm)
-  const cellHeightPt = millimetersToPoints(strip.dimensions.heightMm)
-  const cellWidthMm = getCellWidthMm(strip)
-  const cellWidthPt = millimetersToPoints(cellWidthMm)
+  const rowTopOffsetsMm = getStripRowTopOffsetsMm(strip)
+  const rowsWithBottomMm = strip.rows.map((row, index) => ({
+    row,
+    bottomMm:
+      placement.heightMm -
+      rowTopOffsetsMm[index] -
+      row.dimensions.heightMm,
+  }))
 
   // The matrix contains rotation and translation only. Physical dimensions
   // remain the direct millimeter-to-point conversion used below.
@@ -420,60 +426,70 @@ function drawStrip(
     color: rgb(1, 1, 1),
   })
 
-  strip.cells.forEach((cell, index) => {
-    const fill = hexToRgb(cell.appearance.backgroundColor)
-    const border = hexToRgb(cell.appearance.borderColor)
-    page.drawRectangle({
-      x: cellWidthPt * index,
-      y: 0,
-      width: cellWidthPt,
-      height: cellHeightPt,
-      color: rgb(fill.red, fill.green, fill.blue),
-      borderColor: rgb(border.red, border.green, border.blue),
-      borderWidth: millimetersToPoints(0.12),
+  rowsWithBottomMm.forEach(({ row, bottomMm }) => {
+    const cellWidthPt = millimetersToPoints(getCellWidthMm(row))
+    row.cells.forEach((cell, index) => {
+      const fill = hexToRgb(cell.appearance.backgroundColor)
+      const border = hexToRgb(cell.appearance.borderColor)
+      page.drawRectangle({
+        x: cellWidthPt * index,
+        y: millimetersToPoints(bottomMm),
+        width: cellWidthPt,
+        height: millimetersToPoints(row.dimensions.heightMm),
+        color: rgb(fill.red, fill.green, fill.blue),
+        borderColor: rgb(border.red, border.green, border.blue),
+        borderWidth: millimetersToPoints(0.12),
+      })
     })
   })
 
-  strip.groupHeaders.forEach((header) => {
-    const geometry = getGroupHeaderGeometryMm(strip, header)
-    const fill = hexToRgb(header.style.backgroundColor)
-    page.drawRectangle({
-      x: millimetersToPoints(geometry.xMm),
-      y: millimetersToPoints(geometry.yMm),
-      width: millimetersToPoints(geometry.widthMm),
-      height: millimetersToPoints(geometry.heightMm),
-      color: rgb(fill.red, fill.green, fill.blue),
-      borderColor: grayscale(0.05),
-      borderWidth: millimetersToPoints(0.12),
+  rowsWithBottomMm.forEach(({ row, bottomMm }) => {
+    row.groupHeaders.forEach((header) => {
+      const geometry = getGroupHeaderGeometryMm(row, header)
+      const fill = hexToRgb(header.style.backgroundColor)
+      page.drawRectangle({
+        x: millimetersToPoints(geometry.xMm),
+        y: millimetersToPoints(bottomMm + geometry.yMm),
+        width: millimetersToPoints(geometry.widthMm),
+        height: millimetersToPoints(geometry.heightMm),
+        color: rgb(fill.red, fill.green, fill.blue),
+        borderColor: grayscale(0.05),
+        borderWidth: millimetersToPoints(0.12),
+      })
     })
   })
 
-  strip.cells.forEach((cell, index) => {
-    const contentGeometry = getCellContentGeometryMm(strip, index)
-    drawCellText(
-      page,
-      cell,
-      cellWidthPt * index,
-      millimetersToPoints(contentGeometry.yMm),
-      cellWidthPt,
-      millimetersToPoints(contentGeometry.heightMm),
-      regularFont,
-      boldFont,
-    )
+  rowsWithBottomMm.forEach(({ row, bottomMm }) => {
+    const cellWidthPt = millimetersToPoints(getCellWidthMm(row))
+    row.cells.forEach((cell, index) => {
+      const contentGeometry = getCellContentGeometryMm(row, index)
+      drawCellText(
+        page,
+        cell,
+        cellWidthPt * index,
+        millimetersToPoints(bottomMm + contentGeometry.yMm),
+        cellWidthPt,
+        millimetersToPoints(contentGeometry.heightMm),
+        regularFont,
+        boldFont,
+      )
+    })
   })
 
-  strip.groupHeaders.forEach((header) => {
-    const geometry = getGroupHeaderGeometryMm(strip, header)
-    drawGroupHeaderText(
-      page,
-      header,
-      millimetersToPoints(geometry.xMm),
-      millimetersToPoints(geometry.yMm),
-      millimetersToPoints(geometry.widthMm),
-      millimetersToPoints(geometry.heightMm),
-      regularFont,
-      boldFont,
-    )
+  rowsWithBottomMm.forEach(({ row, bottomMm }) => {
+    row.groupHeaders.forEach((header) => {
+      const geometry = getGroupHeaderGeometryMm(row, header)
+      drawGroupHeaderText(
+        page,
+        header,
+        millimetersToPoints(geometry.xMm),
+        millimetersToPoints(bottomMm + geometry.yMm),
+        millimetersToPoints(geometry.widthMm),
+        millimetersToPoints(geometry.heightMm),
+        regularFont,
+        boldFont,
+      )
+    })
   })
 
   page.drawRectangle({

@@ -8,13 +8,13 @@ import {
   updateGroupHeader,
 } from '../src/lib/group-headers'
 import { getStripTotalHeightMm } from '../src/lib/dimensions'
-import { createStrip } from '../src/model/defaults'
+import { createStrip, createStripRow } from '../src/model/defaults'
 import { duplicateStrip, removeStrip } from '../src/lib/strip'
 
 describe('group headers', () => {
   it('maps cells 1–6 and 7–12 to exact physical boundaries', () => {
     const first = addGroupHeader(
-      createStrip('Twelve cells', 432, 7.5, 12),
+      createStripRow('Twelve cells', 432, 7.5, 12),
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
@@ -33,7 +33,7 @@ describe('group headers', () => {
   })
 
   it('keeps physical height at 7.5 mm with no, one, or several headers', () => {
-    const withoutHeaders = createStrip('Header height', 432, 7.5, 12)
+    const withoutHeaders = createStripRow('Header height', 432, 7.5, 12)
     const oneHeader = addGroupHeader(
       withoutHeaders,
       { startIndex: 0, endIndex: 5 },
@@ -52,7 +52,7 @@ describe('group headers', () => {
 
   it('subdivides only covered cells inside the existing strip height', () => {
     const strip = addGroupHeader(
-      createStrip('Header height', 432, 7.5, 12),
+      createStripRow('Header height', 432, 7.5, 12),
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
@@ -71,7 +71,7 @@ describe('group headers', () => {
 
   it('rejects overlapping ranges and leaves the source strip unchanged', () => {
     const strip = addGroupHeader(
-      createStrip('No overlaps', 432, 7.5, 12),
+      createStripRow('No overlaps', 432, 7.5, 12),
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
@@ -88,7 +88,7 @@ describe('group headers', () => {
 
   it('edits and removes a header without changing cell contents', () => {
     const strip = addGroupHeader(
-      createStrip('Editable', 432, 7.5, 12),
+      createStripRow('Editable', 432, 7.5, 12),
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
@@ -105,8 +105,9 @@ describe('group headers', () => {
   })
 
   it('deleting a header keeps its strip while deleting a strip removes it', () => {
+    const block = createStrip('Keep cells', 432, 7.5, 12)
     const strip = addGroupHeader(
-      createStrip('Keep cells', 432, 7.5, 12),
+      block.rows[0],
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
@@ -114,28 +115,32 @@ describe('group headers', () => {
     expect(withoutHeader.id).toBe(strip.id)
     expect(withoutHeader.cells).toHaveLength(12)
 
+    const keptBlock = { ...block, rows: [withoutHeader] }
     const otherStrip = createStrip('Other', 216, 7.5, 8)
-    const remaining = removeStrip([withoutHeader, otherStrip], strip.id)
+    const remaining = removeStrip([keptBlock, otherStrip], block.id)
     expect(remaining).toEqual([otherStrip])
   })
 
   it('duplicates header data and issues fresh stable IDs', () => {
-    const strip = addGroupHeader(
-      createStrip('Original', 432, 7.5, 12),
+    const strip = createStrip('Original', 432, 7.5, 12)
+    strip.rows[0] = addGroupHeader(
+      strip.rows[0],
       { startIndex: 0, endIndex: 5 },
       'MICROPHONES',
     )
     const copy = duplicateStrip(strip, 'Copy')
 
-    expect(copy.groupHeaders[0]).toMatchObject({
+    expect(copy.rows[0].groupHeaders[0]).toMatchObject({
       text: 'MICROPHONES',
       startCellIndex: 0,
       endCellIndex: 5,
-      style: strip.groupHeaders[0].style,
+      style: strip.rows[0].groupHeaders[0].style,
     })
-    expect(copy.groupHeaders[0].id).not.toBe(strip.groupHeaders[0].id)
-    expect(copy.cells.map((cell) => cell.id)).not.toEqual(
-      strip.cells.map((cell) => cell.id),
+    expect(copy.rows[0].groupHeaders[0].id).not.toBe(
+      strip.rows[0].groupHeaders[0].id,
+    )
+    expect(copy.rows[0].cells.map((cell) => cell.id)).not.toEqual(
+      strip.rows[0].cells.map((cell) => cell.id),
     )
   })
 })

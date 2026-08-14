@@ -1,6 +1,7 @@
 import {
   GEOMETRY_ANGLE_EPSILON_DEGREES,
   GEOMETRY_EPSILON_MM,
+  GEOMETRY_EPSILON_MM2,
   degreesToRadians,
   type PointMm,
 } from './geometry'
@@ -226,10 +227,129 @@ export function getCutLineSegmentsMm(
   )
 }
 
+function crossProduct(
+  firstX: number,
+  firstY: number,
+  secondX: number,
+  secondY: number,
+): number {
+  return firstX * secondY - firstY * secondX
+}
+
+function pointIsStrictlyInsideConvexPolygonMm(
+  point: PointMm,
+  polygon: readonly PointMm[],
+): boolean {
+  let hasPositive = false
+  let hasNegative = false
+  let isOnBoundary = false
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index]
+    const end = polygon[(index + 1) % polygon.length]
+    const cross = crossProduct(
+      end.xMm - start.xMm,
+      end.yMm - start.yMm,
+      point.xMm - start.xMm,
+      point.yMm - start.yMm,
+    )
+    if (cross > GEOMETRY_EPSILON_MM2) hasPositive = true
+    else if (cross < -GEOMETRY_EPSILON_MM2) hasNegative = true
+    else isOnBoundary = true
+    if (hasPositive && hasNegative) return false
+  }
+  return !isOnBoundary && (hasPositive || hasNegative)
+}
+
+function getSegmentEdgeIntersectionParameters(
+  segment: LineSegmentMm,
+  edge: LineSegmentMm,
+): number[] {
+  const directionX = segment.end.xMm - segment.start.xMm
+  const directionY = segment.end.yMm - segment.start.yMm
+  const edgeX = edge.end.xMm - edge.start.xMm
+  const edgeY = edge.end.yMm - edge.start.yMm
+  const offsetX = edge.start.xMm - segment.start.xMm
+  const offsetY = edge.start.yMm - segment.start.yMm
+  const denominator = crossProduct(directionX, directionY, edgeX, edgeY)
+
+  if (Math.abs(denominator) > GEOMETRY_EPSILON_MM2) {
+    const segmentParameter =
+      crossProduct(offsetX, offsetY, edgeX, edgeY) / denominator
+    const edgeParameter =
+      crossProduct(offsetX, offsetY, directionX, directionY) / denominator
+    return segmentParameter >= -GEOMETRY_EPSILON_MM &&
+      segmentParameter <= 1 + GEOMETRY_EPSILON_MM &&
+      edgeParameter >= -GEOMETRY_EPSILON_MM &&
+      edgeParameter <= 1 + GEOMETRY_EPSILON_MM
+      ? [Math.max(0, Math.min(1, segmentParameter))]
+      : []
+  }
+
+  if (
+    Math.abs(crossProduct(offsetX, offsetY, directionX, directionY)) >
+    GEOMETRY_EPSILON_MM2
+  ) {
+    return []
+  }
+  const lengthSquared = directionX * directionX + directionY * directionY
+  if (lengthSquared <= GEOMETRY_EPSILON_MM * GEOMETRY_EPSILON_MM) return []
+  return [edge.start, edge.end]
+    .map(
+      (point) =>
+        ((point.xMm - segment.start.xMm) * directionX +
+          (point.yMm - segment.start.yMm) * directionY) /
+        lengthSquared,
+    )
+    .filter(
+      (parameter) =>
+        parameter >= -GEOMETRY_EPSILON_MM &&
+        parameter <= 1 + GEOMETRY_EPSILON_MM,
+    )
+    .map((parameter) => Math.max(0, Math.min(1, parameter)))
+}
+
+/** True only when some positive-length part of a segment enters the polygon. */
+export function segmentEntersPolygonInteriorMm(
+  segment: LineSegmentMm,
+  polygon: readonly PointMm[],
+): boolean {
+  if (polygon.length < 3) return false
+  const parameters = [
+    0,
+    1,
+    ...getPolygonEdgeSegmentsMm(polygon).flatMap((edge) =>
+      getSegmentEdgeIntersectionParameters(segment, edge),
+    ),
+  ]
+    .sort((left, right) => left - right)
+    .filter(
+      (parameter, index, sorted) =>
+        index === 0 ||
+        Math.abs(parameter - sorted[index - 1]) > GEOMETRY_EPSILON_MM,
+    )
+  const pointAt = (parameter: number): PointMm => ({
+    xMm:
+      segment.start.xMm +
+      (segment.end.xMm - segment.start.xMm) * parameter,
+    yMm:
+      segment.start.yMm +
+      (segment.end.yMm - segment.start.yMm) * parameter,
+  })
+
+  return parameters.some((parameter) =>
+    pointIsStrictlyInsideConvexPolygonMm(pointAt(parameter), polygon),
+  ) || parameters.slice(0, -1).some((parameter, index) =>
+    pointIsStrictlyInsideConvexPolygonMm(
+      pointAt((parameter + parameters[index + 1]) / 2),
+      polygon,
+    ),
+  )
+}
+
 export function getCropMarkSegmentsMm(
   polygons: readonly (readonly PointMm[])[],
 ): LineSegmentMm[] {
-  const marks = polygons.flatMap((polygon) =>
+  const marks = polygons.flatMap((polygon, polygonIndex) =>
     polygon.flatMap((corner, index) => {
       const previous = polygon[(index - 1 + polygon.length) % polygon.length]
       const next = polygon[(index + 1) % polygon.length]
@@ -244,10 +364,16 @@ export function getCropMarkSegmentsMm(
           xMm: corner.xMm + unitX * distanceMm,
           yMm: corner.yMm + unitY * distanceMm,
         })
-        return [{
+        const mark = {
           start: pointAt(CROP_MARK_OFFSET_MM),
           end: pointAt(CROP_MARK_OFFSET_MM + CROP_MARK_LENGTH_MM),
-        }]
+        }
+        const conflicts = polygons.some(
+          (other, otherIndex) =>
+            otherIndex !== polygonIndex &&
+            segmentEntersPolygonInteriorMm(mark, other),
+        )
+        return conflicts ? [] : [mark]
       })
     }),
   )

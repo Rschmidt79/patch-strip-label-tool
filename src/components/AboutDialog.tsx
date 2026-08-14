@@ -79,6 +79,29 @@ export function AboutDialog({
           </ul>
         </div>
 
+        <section className="about-changelog" aria-labelledby="changelog-title">
+          <h3 id="changelog-title">What’s New</h3>
+          <article>
+            <h4>v{APP_VERSION}</h4>
+            <ul>
+              <li>Multi-row strips</li>
+              <li>Join and split rows</li>
+              <li>Smarter crop/cut-marker handling</li>
+              <li>Group-header background colours</li>
+              <li>Improved range-selection discoverability</li>
+              <li>Refined cell focus indication</li>
+            </ul>
+          </article>
+          <article>
+            <h4>v0.7.0-beta</h4>
+            <ul>
+              <li>SRA3 support</li>
+              <li>432 mm rack strips fit horizontally on SRA3</li>
+              <li>Mobile-screen notice</li>
+            </ul>
+          </article>
+        </section>
+
         {installPromptAvailable && (
           <div className="about-install">
             <div>

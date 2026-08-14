@@ -3,7 +3,7 @@ import {
   getCellWidthMm,
   millimetersToPoints,
 } from '../src/lib/dimensions'
-import { createStrip } from '../src/model/defaults'
+import { createStripRow } from '../src/model/defaults'
 
 describe('physical unit conversion', () => {
   it('converts 25.4 mm to exactly 72 PDF points', () => {
@@ -19,7 +19,7 @@ describe('physical unit conversion', () => {
   })
 
   it('keeps a 432 mm / 16 cell strip at exactly 27 mm per cell', () => {
-    const strip = createStrip('Full rack', 432, 7.5, 16)
+    const strip = createStripRow('Full rack', 432, 7.5, 16)
     expect(getCellWidthMm(strip)).toBe(27)
   })
 })
