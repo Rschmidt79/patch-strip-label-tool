@@ -17,6 +17,7 @@ import {
   addStripRow,
   getStripJoinError,
   joinStrips,
+  resizeStripRows,
   splitStripRows,
   updateStripRow,
 } from '../src/lib/strip'
@@ -73,6 +74,25 @@ describe('multi-row physical label blocks', () => {
     expect(edited.rows[0].cells[0].line1).toBe('TOP')
     expect(edited.rows[1].cells[0].line1).toBe('BOTTOM')
     expect(edited.rows[1].dimensions).toEqual(edited.rows[0].dimensions)
+  })
+
+  it('resizes a strip between one and three rows without changing retained data or width', () => {
+    const source = createStrip('Selectable rows', 432, 7.5, 16)
+    source.rows[0].cells[0].line1 = 'KEEP'
+    const threeRows = resizeStripRows(source, 3)
+    threeRows.rows[1].cells[0].line1 = 'ROW 2'
+    const twoRows = resizeStripRows(threeRows, 2)
+    const oneRow = resizeStripRows(twoRows, 1)
+
+    expect(threeRows.rows).toHaveLength(3)
+    expect(twoRows.rows).toHaveLength(2)
+    expect(twoRows.rows[0].id).toBe(source.rows[0].id)
+    expect(twoRows.rows[1].id).toBe(threeRows.rows[1].id)
+    expect(twoRows.rows[1].cells[0].line1).toBe('ROW 2')
+    expect(oneRow.rows[0].cells[0].line1).toBe('KEEP')
+    expect(threeRows.rows.every((row) => row.dimensions.widthMm === 432)).toBe(
+      true,
+    )
   })
 
   it('joins compatible strips in top-to-bottom project order without changing rows', () => {

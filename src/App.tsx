@@ -12,6 +12,7 @@ import {
   getStripJoinError,
   joinStrips,
   removeStrip,
+  resizeStripRows,
   splitStripRows,
   updateStripRow,
 } from './lib/strip'
@@ -30,7 +31,6 @@ import {
   applyAutoNumbering,
   applyAutoNumberingToRange,
   clearCellRangeContents,
-  type CellRange,
 } from './lib/auto-numbering'
 import {
   createLabelsPdfFileName,
@@ -76,19 +76,12 @@ import {
   MAX_PROJECT_STRIPS,
 } from './config/content-limits'
 import { PROJECT_FILE_MIME_TYPE } from './config/project-files'
-
-interface CellSelection {
-  stripId: string
-  rowId: string
-  anchorCellId: string
-  focusCellId: string
-}
-
-interface ResolvedCellSelection extends CellRange {
-  stripId: string
-  rowId: string
-  cellIds: string[]
-}
+import {
+  isEditorSelectionValid,
+  resolveEditorCellSelection,
+  selectEditorCell,
+  type EditorSelection,
+} from './lib/editor-selection'
 
 interface AppNotice {
   kind: 'success' | 'error'
@@ -128,7 +121,7 @@ export function App() {
     project.strips[0]?.rows[0]?.id,
   )
   const [selectedJoinStripIds, setSelectedJoinStripIds] = useState<string[]>([])
-  const [selection, setSelection] = useState<CellSelection | undefined>()
+  const [selection, setSelection] = useState<EditorSelection | undefined>()
   const [editingCellId, setEditingCellId] = useState<string | undefined>()
   const [previewScale, setPreviewScale] = useState(1.35)
   const [notice, setNotice] = useState<AppNotice | undefined>()
@@ -161,36 +154,10 @@ export function App() {
   const activeRowIndex = activeStrip?.rows.findIndex(
     (row) => row.id === activeRowId,
   ) ?? -1
-  const resolvedSelection = useMemo<ResolvedCellSelection | undefined>(() => {
-    if (!selection) return undefined
-    const strip = project.strips.find(
-      (candidate) => candidate.id === selection.stripId,
-    )
-    if (!strip) return undefined
-
-    const row = strip.rows.find((candidate) => candidate.id === selection.rowId)
-    if (!row) return undefined
-
-    const anchorIndex = row.cells.findIndex(
-      (cell) => cell.id === selection.anchorCellId,
-    )
-    const focusIndex = row.cells.findIndex(
-      (cell) => cell.id === selection.focusCellId,
-    )
-    if (anchorIndex < 0 || focusIndex < 0) return undefined
-
-    const startIndex = Math.min(anchorIndex, focusIndex)
-    const endIndex = Math.max(anchorIndex, focusIndex)
-    return {
-      stripId: strip.id,
-      rowId: row.id,
-      startIndex,
-      endIndex,
-      cellIds: row.cells
-        .slice(startIndex, endIndex + 1)
-        .map((cell) => cell.id),
-    }
-  }, [project.strips, selection])
+  const resolvedSelection = useMemo(
+    () => resolveEditorCellSelection(project.strips, selection),
+    [project.strips, selection],
+  )
   const selectedCell = useMemo(
     () =>
       resolvedSelection?.cellIds.length === 1
@@ -217,13 +184,11 @@ export function App() {
       : cells
   }, [project.strips, resolvedSelection])
   const selectedGroupHeader = useMemo(() => {
-    if (!activeRow || !resolvedSelection) return undefined
+    if (!activeRow || selection?.kind !== 'header') return undefined
     return activeRow.groupHeaders.find(
-      (header) =>
-        header.startCellIndex === resolvedSelection.startIndex &&
-        header.endCellIndex === resolvedSelection.endIndex,
+      (header) => header.id === selection.headerId,
     )
-  }, [activeRow, resolvedSelection])
+  }, [activeRow, selection])
   const joinError = useMemo(
     () =>
       selectedJoinStripIds.length > 0
@@ -289,6 +254,24 @@ export function App() {
     updater: (row: LabelStripRow) => LabelStripRow,
   ) {
     updateStrip(stripId, (strip) => updateStripRow(strip, rowId, updater))
+  }
+
+  function updateRowFromStripSetup(
+    stripId: string,
+    rowId: string,
+    updater: (row: LabelStripRow) => LabelStripRow,
+  ) {
+    const source = project.strips.find((strip) => strip.id === stripId)
+    if (!source) return
+    const updatedStrip = updateStripRow(source, rowId, updater)
+    const nextStrips = project.strips.map((strip) =>
+      strip.id === stripId ? updatedStrip : strip,
+    )
+
+    updateStrip(stripId, () => updatedStrip)
+    if (selection && !isEditorSelectionValid(nextStrips, selection)) {
+      clearSelection()
+    }
   }
 
   function updateSelectedCell(updater: (cell: LabelCell) => LabelCell) {
@@ -628,6 +611,37 @@ export function App() {
     clearSelection()
   }
 
+  function handleSetRowCount(stripId: string, rowCount: 1 | 2 | 3) {
+    const source = project.strips.find((strip) => strip.id === stripId)
+    if (!source || source.rows.length === rowCount) return
+
+    const addedRows = Math.max(0, rowCount - source.rows.length)
+    const currentRowCount = project.strips.reduce(
+      (count, strip) => count + strip.rows.length,
+      0,
+    )
+    if (currentRowCount + addedRows > MAX_PROJECT_ROWS) {
+      setNotice({
+        kind: 'error',
+        message: `A project can contain at most ${MAX_PROJECT_ROWS} rows.`,
+      })
+      return
+    }
+
+    const resized = resizeStripRows(source, rowCount)
+    updateStrip(stripId, () => resized)
+    const nextActiveRow =
+      resized.rows.find((row) => row.id === activeRowId) ?? resized.rows.at(-1)
+    setActiveStripId(stripId)
+    setActiveRowId(nextActiveRow?.id)
+    if (
+      selection?.stripId === stripId &&
+      !resized.rows.some((row) => row.id === selection.rowId)
+    ) {
+      clearSelection()
+    }
+  }
+
   function handleSplitRows(stripId: string) {
     const sourceIndex = project.strips.findIndex((strip) => strip.id === stripId)
     const source = project.strips[sourceIndex]
@@ -698,10 +712,10 @@ export function App() {
     setActiveStripId(next.stripId)
     setActiveRowId(next.rowId)
     setSelection({
+      kind: 'cell',
       stripId: next.stripId,
       rowId: next.rowId,
-      anchorCellId: next.cellId,
-      focusCellId: next.cellId,
+      cellId: next.cellId,
     })
     setEditingCellId(next.cellId)
   }
@@ -715,51 +729,53 @@ export function App() {
     setActiveStripId(stripId)
     setActiveRowId(rowId)
 
-    if (
-      extendSelection &&
-      selection?.stripId === stripId &&
-      selection.rowId === rowId
-    ) {
-      setSelection({ ...selection, focusCellId: cellId })
-      setEditingCellId(undefined)
-      return
-    }
-
-    setSelection({
-      stripId,
-      rowId,
-      anchorCellId: cellId,
-      focusCellId: cellId,
-    })
+    setSelection((current) =>
+      selectEditorCell(current, stripId, rowId, cellId, extendSelection),
+    )
     setEditingCellId(extendSelection ? undefined : cellId)
   }
 
   function handleSelectGroupHeader(
     stripId: string,
     rowId: string,
-    startCellId: string,
-    endCellId: string,
+    headerId: string,
   ) {
     setActiveStripId(stripId)
     setActiveRowId(rowId)
     setSelection({
+      kind: 'header',
       stripId,
       rowId,
-      anchorCellId: startCellId,
-      focusCellId: endCellId,
+      headerId,
     })
     setEditingCellId(undefined)
   }
 
-  function handleAddGroupHeader(text: string) {
+  function handleAddGroupHeader() {
     if (!activeStrip || !activeRow || !resolvedSelection) return
     try {
-      updateRow(activeStrip.id, activeRow.id, (row) =>
-        addGroupHeader(row, resolvedSelection, text),
+      const updatedRow = addGroupHeader(
+        activeRow,
+        resolvedSelection,
+        'Header',
       )
+      const addedHeader = updatedRow.groupHeaders.find(
+        (header) =>
+          !activeRow.groupHeaders.some((current) => current.id === header.id),
+      )
+      updateRow(activeStrip.id, activeRow.id, () => updatedRow)
+      if (addedHeader) {
+        setSelection({
+          kind: 'header',
+          stripId: activeStrip.id,
+          rowId: activeRow.id,
+          headerId: addedHeader.id,
+        })
+        setEditingCellId(undefined)
+      }
       setNotice({
         kind: 'success',
-        message: `Added “${text.trim()}” above ${selectedRangeLabel}.`,
+        message: `Added a header above ${selectedRangeLabel}.`,
       })
     } catch (error) {
       setNotice({
@@ -800,6 +816,7 @@ export function App() {
       kind: 'success',
       message: `Deleted header “${selectedGroupHeader.text}”. Cell contents were unchanged.`,
     })
+    clearSelection()
   }
 
   function handleApplyCellAppearance(appearance: Partial<CellAppearance>) {
@@ -1024,9 +1041,8 @@ export function App() {
       )}
       <div className="app-body">
         <Sidebar
-          activeStrip={activeStrip}
+          selectionKind={selection?.kind}
           activeRow={activeRow}
-          activeRowIndex={Math.max(0, activeRowIndex)}
           selectedCell={selectedCell}
           selectedCellCount={resolvedSelection?.cellIds.length ?? 0}
           selectedRangeLabel={selectedRangeLabel}
@@ -1061,6 +1077,9 @@ export function App() {
           selectedJoinStripIds={selectedJoinStripIds}
           joinError={joinError}
           selectedCellIds={resolvedSelection?.cellIds ?? []}
+          selectedHeaderId={
+            selection?.kind === 'header' ? selection.headerId : undefined
+          }
           selectedCellCount={resolvedSelection?.cellIds.length ?? 0}
           editingCellId={editingCellId}
           selectionLabel={selectedRangeLabel}
@@ -1077,6 +1096,14 @@ export function App() {
               clearSelection()
             }
           }}
+          onActivateRow={(stripId, rowId) => {
+            const changedRow = stripId !== activeStripId || rowId !== activeRowId
+            setActiveStripId(stripId)
+            setActiveRowId(rowId)
+            if (changedRow) clearSelection()
+          }}
+          onUpdateRow={updateRowFromStripSetup}
+          onSetRowCount={handleSetRowCount}
           onRenameStrip={(stripId, name) =>
             updateStrip(stripId, (strip) => ({ ...strip, name }))
           }

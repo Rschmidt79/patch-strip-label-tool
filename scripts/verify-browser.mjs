@@ -104,7 +104,7 @@ async function clickStripButton(stripIndex, text) {
 
 async function selectPreset(presetId) {
   const changed = await execute(
-    `const select = document.querySelector('.sidebar-panel:first-of-type select'); if (!select) return false; select.value = arguments[0]; select.dispatchEvent(new Event('change', { bubbles: true })); return true;`,
+    `const select = document.querySelector('.strip-card:first-of-type .row-preset-field select'); if (!select) return false; select.value = arguments[0]; select.dispatchEvent(new Event('change', { bubbles: true })); return true;`,
     [presetId],
   )
   assert(changed, `Preset selector not found for ${presetId}`)
@@ -126,13 +126,9 @@ async function selectRange(startIndex, endIndex, stripIndex = 0) {
 }
 
 async function addHeader(text) {
-  const changed = await execute(
-    `const input = document.querySelector('input[placeholder="MICROPHONES"]'); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, arguments[0]); input.dispatchEvent(new Event('input', { bubbles: true })); return true;`,
-    [text],
-  )
-  assert(changed, 'Group header input was not found')
-  await delay(100)
-  await clickButton('Add group header')
+  await clickButton('+ Add header')
+  await setInputByLabel('Header text', text)
+  await clickButton('Save header')
 }
 
 async function waitForDownload(extension, previousFiles = []) {
@@ -195,8 +191,9 @@ try {
   assert(betaUi.beta === 'Beta', 'Beta indicator is missing')
   assert(versionBuildPattern.test(betaUi.version), 'Version/build footer is incorrect')
 
+  await selectCell(0)
   const emptyDefaults = await execute(
-    `return { cells: [...document.querySelectorAll('.strip-card:first-of-type .svg-cell')].map((cell) => cell.getAttribute('aria-label')), line1Template: document.querySelector('input[aria-label="Line 1 template"]')?.value, line2Template: document.querySelector('input[aria-label="Line 2 template"]')?.value };`,
+    `return { cells: [...document.querySelectorAll('.strip-card:first-of-type .svg-cell')].map((cell) => cell.getAttribute('aria-label')), line1Template: document.querySelector('input[aria-label="Line 1"]')?.value, line2Template: document.querySelector('input[aria-label="Line 2"]')?.value };`,
   )
   assert(emptyDefaults.cells.every((label) => /^Row 1, cell \d+:\s*$/i.test(label)), 'New strip cells were not empty')
   assert(emptyDefaults.line1Template === 'Router Out' && emptyDefaults.line2Template === '{n}', 'Neutral Auto Number templates were not retained unapplied')
@@ -265,34 +262,34 @@ try {
   await addHeader('MICROPHONES')
 
   await selectRange(0, 5)
-  await setInputByLabel('Line 1 template', 'Router Out')
-  await setInputByLabel('Line 2 template', '')
+  await setInputByLabel('Line 1', 'Router Out')
+  await setInputByLabel('Line 2', '')
   const preparedNumberInsertion = await execute(
-    `const input = document.querySelector('input[aria-label="Line 2 template"]'); if (!input) return false; input.focus(); input.setSelectionRange(0, 0); const button = document.querySelector('button[aria-label="Insert sequence number into Line 2 template"]'); if (!button) return false; button.click(); return true;`,
+    `const input = document.querySelector('input[aria-label="Line 2"]'); if (!input) return false; input.focus(); input.setSelectionRange(0, 0); const button = document.querySelector('button[aria-label="Insert sequence number into Line 2"]'); if (!button) return false; button.click(); return true;`,
   )
   assert(preparedNumberInsertion, 'The # Auto Number control was not available')
   await delay(120)
   const insertedTemplate = await execute(
-    `return document.querySelector('input[aria-label="Line 2 template"]')?.value;`,
+    `return document.querySelector('input[aria-label="Line 2"]')?.value;`,
   )
   assert(insertedTemplate === '{n}', '# did not insert {n} at the cursor')
   await setInputByLabel('Start number', 1)
   await setInputByLabel('Digit padding', 2)
   await clickButton('Apply to cells 1–6')
   await selectRange(6, 11)
-  await setInputByLabel('Line 1 template', 'LINE AUDIO')
-  await setInputByLabel('Line 2 template', '{n}')
+  await setInputByLabel('Line 1', 'LINE AUDIO')
+  await setInputByLabel('Line 2', '{n}')
   await clickButton('Apply to cells 7–12')
 
   await selectRange(0, 5)
   const yellowApplied = await execute(
-    `const button = document.querySelector('.range-style-group .color-swatches button[title="Yellow"]'); if (!button) return false; button.click(); return true;`,
+    `const button = document.querySelector('.appearance-controls .color-swatches button[title="Yellow"]'); if (!button) return false; button.click(); return true;`,
   )
   assert(yellowApplied, 'Yellow range preset was not available')
   await delay(120)
   await selectRange(6, 11)
   const blueApplied = await execute(
-    `const button = document.querySelector('.range-style-group .color-swatches button[title="Blue"]'); if (!button) return false; button.click(); return true;`,
+    `const button = document.querySelector('.appearance-controls .color-swatches button[title="Blue"]'); if (!button) return false; button.click(); return true;`,
   )
   assert(blueApplied, 'Blue range preset was not available')
   await delay(120)

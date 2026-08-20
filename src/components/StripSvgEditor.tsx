@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   CSS_PX_PER_MM,
   getCellWidthMm,
@@ -20,6 +19,7 @@ interface StripSvgEditorProps {
   strip: LabelStrip
   activeRowId: string | undefined
   selectedCellIds: readonly string[]
+  selectedHeaderId: string | undefined
   editingCellId: string | undefined
   previewScale: number
   onSelectCell: (
@@ -27,11 +27,7 @@ interface StripSvgEditorProps {
     cellId: string,
     extendSelection: boolean,
   ) => void
-  onSelectGroupHeader: (
-    rowId: string,
-    startCellId: string,
-    endCellId: string,
-  ) => void
+  onSelectGroupHeader: (rowId: string, headerId: string) => void
   onClearSelection: () => void
   onChangeCellText: (
     rowId: string,
@@ -61,13 +57,11 @@ function CellTextareaEditor({
   onMoveCell,
   onClearSelection,
 }: CellTextareaEditorProps) {
-  const [draft, setDraft] = useState(() => editValue(cell))
-
   return (
     <textarea
       className="svg-cell-input"
       autoFocus
-      value={draft}
+      value={editValue(cell)}
       maxLength={MAX_CELL_TEXT_LENGTH * 2 + 1}
       aria-label={`Edit cell ${index + 1}, two lines maximum`}
       style={{
@@ -89,9 +83,6 @@ function CellTextareaEditor({
                 .slice(firstBreak + 1)
                 .replace(/\n/g, ' ')
                 .slice(0, MAX_CELL_TEXT_LENGTH)
-        const nextDraft = firstBreak === -1 ? line1 : `${line1}\n${line2}`
-
-        setDraft(nextDraft)
         onChangeCellText(cell.id, line1, line2)
       }}
       onKeyDown={(event) => {
@@ -112,6 +103,7 @@ export function StripSvgEditor({
   strip,
   activeRowId,
   selectedCellIds,
+  selectedHeaderId,
   editingCellId,
   previewScale,
   onSelectCell,
@@ -172,17 +164,10 @@ export function StripSvgEditor({
               transform={`translate(0 ${topMm})`}
             >
               {row.groupHeaders.map((header) => {
-                const startCell = row.cells[header.startCellIndex]
-                const endCell = row.cells[header.endCellIndex]
                 const headerGeometry = getGroupHeaderGeometryMm(row, header)
                 const headerTopMm =
                   heightMm - headerGeometry.yMm - headerGeometry.heightMm
-                const isSelected =
-                  rowIsActive &&
-                  row.cells
-                    .slice(header.startCellIndex, header.endCellIndex + 1)
-                    .every((cell) => selectedCellIds.includes(cell.id))
-                if (!startCell || !endCell) return null
+                const isSelected = rowIsActive && header.id === selectedHeaderId
                 return (
                   <g
                     key={`hit-${header.id}`}
@@ -192,12 +177,12 @@ export function StripSvgEditor({
                     aria-label={`Row ${rowIndex + 1}, group header ${header.text}, cells ${header.startCellIndex + 1} through ${header.endCellIndex + 1}`}
                     onPointerDown={(event) => {
                       event.stopPropagation()
-                      onSelectGroupHeader(row.id, startCell.id, endCell.id)
+                      onSelectGroupHeader(row.id, header.id)
                     }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        onSelectGroupHeader(row.id, startCell.id, endCell.id)
+                        onSelectGroupHeader(row.id, header.id)
                       }
                     }}
                   >

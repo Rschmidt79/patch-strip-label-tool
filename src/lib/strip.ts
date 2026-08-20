@@ -140,6 +140,23 @@ export function addStripRow(strip: LabelStrip): LabelStrip {
   return { ...strip, rows: [...strip.rows, row] }
 }
 
+export function resizeStripRows(
+  strip: LabelStrip,
+  nextCount: number,
+): LabelStrip {
+  const rowCount = Math.max(
+    1,
+    Math.min(MAX_ROWS_PER_STRIP, Math.round(nextCount)),
+  )
+  if (rowCount <= strip.rows.length) {
+    return { ...strip, rows: strip.rows.slice(0, rowCount) }
+  }
+
+  let resized = strip
+  while (resized.rows.length < rowCount) resized = addStripRow(resized)
+  return resized
+}
+
 export class StripJoinError extends Error {
   constructor(message: string) {
     super(message)

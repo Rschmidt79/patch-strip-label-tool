@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { LabelProject, LabelStrip } from '../model/project'
+import type { LabelProject, LabelStrip, LabelStripRow } from '../model/project'
 import type { PrintLayoutPlan } from '../lib/print-layout'
 import type { PrintPreferences } from '../lib/print-preferences'
 import { PageLayoutPreview } from './PageLayoutPreview'
@@ -16,6 +16,7 @@ interface WorkspaceProps {
   selectedJoinStripIds: readonly string[]
   joinError: string | undefined
   selectedCellIds: readonly string[]
+  selectedHeaderId: string | undefined
   selectedCellCount: number
   editingCellId: string | undefined
   selectionLabel: string | undefined
@@ -23,6 +24,13 @@ interface WorkspaceProps {
   onPreviewScaleChange: (scale: number) => void
   onPrintPreferencesChange: (preferences: PrintPreferences) => void
   onActivateStrip: (stripId: string) => void
+  onActivateRow: (stripId: string, rowId: string) => void
+  onSetRowCount: (stripId: string, rowCount: 1 | 2 | 3) => void
+  onUpdateRow: (
+    stripId: string,
+    rowId: string,
+    updater: (row: LabelStripRow) => LabelStripRow,
+  ) => void
   onRenameStrip: (stripId: string, name: string) => void
   onSelectCell: (
     stripId: string,
@@ -33,8 +41,7 @@ interface WorkspaceProps {
   onSelectGroupHeader: (
     stripId: string,
     rowId: string,
-    startCellId: string,
-    endCellId: string,
+    headerId: string,
   ) => void
   onClearSelection: () => void
   onChangeCellText: (
@@ -71,6 +78,7 @@ export function Workspace({
   selectedJoinStripIds,
   joinError,
   selectedCellIds,
+  selectedHeaderId,
   selectedCellCount,
   editingCellId,
   selectionLabel,
@@ -78,6 +86,9 @@ export function Workspace({
   onPreviewScaleChange,
   onPrintPreferencesChange,
   onActivateStrip,
+  onActivateRow,
+  onSetRowCount,
+  onUpdateRow,
   onRenameStrip,
   onSelectCell,
   onSelectGroupHeader,
@@ -145,6 +156,9 @@ export function Workspace({
             selectedCellIds={
               strip.id === activeStripId ? selectedCellIds : []
             }
+            selectedHeaderId={
+              strip.id === activeStripId ? selectedHeaderId : undefined
+            }
             selectedCellCount={
               strip.id === activeStripId ? selectedCellCount : 0
             }
@@ -158,12 +172,17 @@ export function Workspace({
             canMoveUp={index > 0}
             canMoveDown={index < strips.length - 1}
             onActivate={() => onActivateStrip(strip.id)}
+            onActivateRow={(rowId) => onActivateRow(strip.id, rowId)}
+            onSetRowCount={(rowCount) => onSetRowCount(strip.id, rowCount)}
+            onUpdateRow={(rowId, updater) =>
+              onUpdateRow(strip.id, rowId, updater)
+            }
             onRename={(name) => onRenameStrip(strip.id, name)}
             onSelectCell={(rowId, cellId, extendSelection) =>
               onSelectCell(strip.id, rowId, cellId, extendSelection)
             }
-            onSelectGroupHeader={(rowId, startCellId, endCellId) =>
-              onSelectGroupHeader(strip.id, rowId, startCellId, endCellId)
+            onSelectGroupHeader={(rowId, headerId) =>
+              onSelectGroupHeader(strip.id, rowId, headerId)
             }
             onClearSelection={onClearSelection}
             onChangeCellText={(rowId, cellId, line1, line2) =>

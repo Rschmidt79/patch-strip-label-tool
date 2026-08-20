@@ -5,10 +5,11 @@ import {
   getStripTotalHeightMm,
   getStripWidthMm,
 } from '../lib/dimensions'
-import type { LabelStrip } from '../model/project'
+import type { LabelStrip, LabelStripRow } from '../model/project'
 import { MAX_NAME_LENGTH } from '../config/content-limits'
 import { MAX_ROWS_PER_STRIP } from '../config/content-limits'
 import { StripSvgEditor } from './StripSvgEditor'
+import { RowDimensionsControls } from './RowDimensionsControls'
 
 interface StripCardProps {
   strip: LabelStrip
@@ -17,6 +18,7 @@ interface StripCardProps {
   activeRowId: string | undefined
   isSelectedForJoin: boolean
   selectedCellIds: readonly string[]
+  selectedHeaderId: string | undefined
   selectedCellCount: number
   editingCellId: string | undefined
   selectionLabel: string | undefined
@@ -24,17 +26,19 @@ interface StripCardProps {
   canMoveUp: boolean
   canMoveDown: boolean
   onActivate: () => void
+  onActivateRow: (rowId: string) => void
+  onSetRowCount: (rowCount: 1 | 2 | 3) => void
+  onUpdateRow: (
+    rowId: string,
+    updater: (row: LabelStripRow) => LabelStripRow,
+  ) => void
   onRename: (name: string) => void
   onSelectCell: (
     rowId: string,
     cellId: string,
     extendSelection: boolean,
   ) => void
-  onSelectGroupHeader: (
-    rowId: string,
-    startCellId: string,
-    endCellId: string,
-  ) => void
+  onSelectGroupHeader: (rowId: string, headerId: string) => void
   onClearSelection: () => void
   onChangeCellText: (
     rowId: string,
@@ -58,6 +62,7 @@ export function StripCard({
   activeRowId,
   isSelectedForJoin,
   selectedCellIds,
+  selectedHeaderId,
   selectedCellCount,
   editingCellId,
   selectionLabel,
@@ -65,6 +70,9 @@ export function StripCard({
   canMoveUp,
   canMoveDown,
   onActivate,
+  onActivateRow,
+  onSetRowCount,
+  onUpdateRow,
   onRename,
   onSelectCell,
   onSelectGroupHeader,
@@ -168,6 +176,14 @@ export function StripCard({
         </div>
       </header>
 
+      <RowDimensionsControls
+        strip={strip}
+        activeRowId={activeRow?.id}
+        onActivateRow={onActivateRow}
+        onSetRowCount={onSetRowCount}
+        onUpdateRow={onUpdateRow}
+      />
+
       <div className="strip-scroll" onPointerDown={onActivate}>
         <div
           className="strip-ruler-track"
@@ -182,6 +198,7 @@ export function StripCard({
           strip={strip}
           activeRowId={activeRowId}
           selectedCellIds={selectedCellIds}
+          selectedHeaderId={selectedHeaderId}
           editingCellId={editingCellId}
           previewScale={previewScale}
           onSelectCell={onSelectCell}
