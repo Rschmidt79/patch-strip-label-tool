@@ -6,7 +6,7 @@ import {
   type PointMm,
 } from './geometry'
 
-export const CUT_LINE_WIDTH_MM = 0.18
+export const CUT_LINE_WIDTH_MM = 0.24
 export const CROP_MARK_WIDTH_MM = 0.16
 export const CROP_MARK_OFFSET_MM = 0.6
 export const CROP_MARK_LENGTH_MM = 2.8

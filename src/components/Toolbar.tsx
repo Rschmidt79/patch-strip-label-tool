@@ -40,7 +40,6 @@ export function Toolbar({
           <strong>Rack Label</strong>
           <small>Maker</small>
         </div>
-        <span className="beta-badge">Beta</span>
       </div>
 
       <label className="project-name-field">

@@ -7,10 +7,9 @@ import {
   MIN_CUSTOM_STRIP_GAP_MM,
   type PrintPreferences,
 } from '../lib/print-preferences'
-import { StripArtwork } from './StripArtwork'
+import { PrintSegmentArtwork } from './PrintSegmentArtwork'
 import supportQrImageUrl from '../assets/bmc_qr.png'
 import {
-  getSafeSupportQrDecorationGeometryMm,
   SUPPORT_QR_LABEL_LINE_1,
   SUPPORT_QR_LABEL_LINE_2,
 } from '../lib/support-qr'
@@ -55,6 +54,9 @@ export function PageLayoutPreview({
   onPreferencesChange,
 }: PageLayoutPreviewProps) {
   const stripsById = new Map(project.strips.map((strip) => [strip.id, strip]))
+  const segmentsById = new Map(
+    plan?.printSegments.map((segment) => [segment.id, segment]) ?? [],
+  )
   const updatePreferences = (change: Partial<PrintPreferences>) =>
     onPreferencesChange({ ...preferences, ...change })
 
@@ -76,6 +78,9 @@ export function PageLayoutPreview({
         )}
       </summary>
 
+      <div
+        className={`page-layout-preview-body${plan ? '' : ' page-layout-preview-body-settings-only'}`}
+      >
       <section className="print-layout-settings" aria-label="Print layout">
         <div className="print-layout-settings-heading">
           <div>
@@ -187,22 +192,12 @@ export function PageLayoutPreview({
             <label className="print-setting-toggle">
               <input
                 type="checkbox"
-                checked={preferences.cutLines}
-                onChange={(event) =>
-                  updatePreferences({ cutLines: event.target.checked })
-                }
-              />
-              <span>Cut lines</span>
-            </label>
-            <label className="print-setting-toggle">
-              <input
-                type="checkbox"
                 checked={preferences.cropMarks}
                 onChange={(event) =>
                   updatePreferences({ cropMarks: event.target.checked })
                 }
               />
-              <span>Crop marks</span>
+              <span>Cut lines</span>
             </label>
           </fieldset>
         </div>
@@ -227,12 +222,7 @@ export function PageLayoutPreview({
               plan.pageHeightMm -
               plan.usableArea.yMm -
               plan.usableArea.heightMm
-            const supportQrGeometry =
-              getSafeSupportQrDecorationGeometryMm(
-                plan.pageWidthMm,
-                plan.pageHeightMm,
-                pagePlacements,
-              )
+            const supportQrGeometry = plan.supportArea
 
             return (
               <figure className="page-preview-card" key={pageIndex}>
@@ -327,8 +317,11 @@ export function PageLayoutPreview({
                       placement.heightMm,
                       placement.rotationDegrees,
                     )
-                    const strip = stripsById.get(placement.stripId)
-                    if (!strip) return null
+                    const segment = segmentsById.get(placement.stripId)
+                    const strip = segment
+                      ? stripsById.get(segment.stripId)
+                      : undefined
+                    if (!strip || !segment) return null
 
                     return (
                       <g
@@ -337,11 +330,17 @@ export function PageLayoutPreview({
                         transform={`translate(${origin.xMm} ${plan.pageHeightMm - origin.yMm}) rotate(${-placement.rotationDegrees}) translate(0 ${-placement.heightMm})`}
                       >
                         <title>
-                          {strip.name || 'Unnamed strip'}: {placement.widthMm} ×{' '}
-                          {placement.heightMm} mm at{' '}
+                          {strip.name || 'Unnamed strip'}
+                          {segment.segmentCount > 1
+                            ? `, segment ${segment.segmentIndex + 1} of ${segment.segmentCount}`
+                            : ''}
+                          : {placement.widthMm} × {placement.heightMm} mm at{' '}
                           {placement.rotationDegrees.toFixed(2)}°
                         </title>
-                        <StripArtwork strip={strip} />
+                        <PrintSegmentArtwork
+                          strip={strip}
+                          segment={segment}
+                        />
                       </g>
                     )
                   })}
@@ -372,6 +371,7 @@ export function PageLayoutPreview({
           })}
         </div>
       )}
+      </div>
     </details>
   )
 }

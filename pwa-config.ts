@@ -21,7 +21,7 @@ export const RACK_LABEL_MAKER_MANIFEST: RackLabelMakerManifest = {
   name: APP_NAME,
   short_name: APP_SHORT_NAME,
   description:
-    'Create, save, print, and export true-size rack and patch-panel labels.',
+    'Free browser-based tool for true-size 19-inch rack and patch-panel labels with printable PDF export.',
   theme_color: PWA_THEME_COLOR,
   background_color: PWA_BACKGROUND_COLOR,
   display: 'standalone',

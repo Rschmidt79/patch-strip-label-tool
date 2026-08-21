@@ -10,13 +10,13 @@ import packageMetadata from '../package.json'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AboutDialog } from '../src/components/AboutDialog'
 
-describe('beta application information', () => {
+describe('application information', () => {
   it('exposes package version and a build-injected ISO date', () => {
     expect(APP_VERSION).toBe(packageMetadata.version)
     expect(BUILD_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('shows the current and previous beta changelog without a startup modal', () => {
+  it('shows the 1.0 and 0.9 changelogs without a startup modal', () => {
     const markup = renderToStaticMarkup(
       AboutDialog({
         installPromptAvailable: false,
@@ -26,9 +26,17 @@ describe('beta application information', () => {
     )
 
     expect(markup).toContain(`v${packageMetadata.version}`)
-    expect(markup).toContain('Multi-row strips')
-    expect(markup).toContain('Join and split rows')
-    expect(markup).toContain('Smarter crop/cut-marker handling')
+    expect(markup).toContain('free browser-based rack label maker')
+    expect(markup).toContain('19-inch racks')
+    expect(markup).toContain('print-ready PDFs')
+    expect(markup).toContain(
+      'Automatic split printing for A4, US Letter, and US Legal',
+    )
+    expect(markup).toContain('Physical glue tabs and assembly guidance')
+    expect(markup).toContain('Stable 1.0 release')
+    expect(markup).toContain('v0.9.0-beta')
+    expect(markup).toContain('Redesigned Inspector')
+    expect(markup).toContain('Side-by-side Print layout controls')
     expect(markup).toContain('v0.7.0-beta')
     expect(markup).toContain('SRA3 support')
   })

@@ -65,6 +65,7 @@ export interface PdfLayoutPlan {
   stripGapMm: number
   pageMarginsMm: Readonly<PageLayoutMarginsMm>
   usableArea: RectMm
+  reservedAreasMm: RectMm[]
   placements: PdfStripPlacement[]
 }
 
@@ -73,6 +74,8 @@ export interface PdfLayoutOptions {
   autoArrange?: boolean
   /** Required physical edge-to-edge clearance. Defaults to 0 mm. */
   stripGapMm?: number
+  /** Print-only page regions which placements may touch but never enter. */
+  reservedAreasMm?: readonly RectMm[]
 }
 
 interface OrientationCandidate {
@@ -226,6 +229,7 @@ function tryPlaceOnPage(
   usableArea: RectMm,
   orientation: OrientationCandidate,
   stripGapMm: number,
+  reservedAreasMm: readonly RectMm[],
 ): PdfStripPlacement | undefined {
   const rightMm = usableArea.xMm + usableArea.widthMm
   const topMm = usableArea.yMm + usableArea.heightMm
@@ -279,6 +283,19 @@ function tryPlaceOnPage(
         heightMm: candidate.boundingHeightMm,
       }
       const candidatePolygon = getPlacementPolygonMm(candidate)
+      const conflictsWithReservedArea = reservedAreasMm.some((area) =>
+        !polygonsMaintainGapMm(
+          candidatePolygon,
+          getRotatedRectangleCornersMm(
+            area.widthMm,
+            area.heightMm,
+            0,
+            { xMm: area.xMm, yMm: area.yMm },
+          ),
+          0,
+        ),
+      )
+      if (conflictsWithReservedArea) continue
       const conflicts = page.placements.some((placement) => {
         const placementBounds: RectMm = {
           xMm: placement.xMm,
@@ -467,12 +484,33 @@ function placementsAreValid(
   placements: readonly PdfStripPlacement[],
   usableArea: RectMm,
   stripGapMm: number,
+  reservedAreasMm: readonly RectMm[],
 ): boolean {
   const polygons = placements.map(getPlacementPolygonMm)
   if (
     !placements.every((placement) =>
       placementStaysInsideUsableArea(placement, usableArea),
     )
+  ) {
+    return false
+  }
+
+  if (
+    placements.some((placement) => {
+      const polygon = getPlacementPolygonMm(placement)
+      return reservedAreasMm.some((area) =>
+        !polygonsMaintainGapMm(
+          polygon,
+          getRotatedRectangleCornersMm(
+            area.widthMm,
+            area.heightMm,
+            0,
+            { xMm: area.xMm, yMm: area.yMm },
+          ),
+          0,
+        ),
+      )
+    })
   ) {
     return false
   }
@@ -583,6 +621,7 @@ function createBestStaggeredDiagonalPlacements(
   pageIndex: number,
   usableArea: RectMm,
   stripGapMm: number,
+  reservedAreasMm: readonly RectMm[],
 ): PdfStripPlacement[] | undefined {
   const firstStrip = strips[0]
   if (!firstStrip || strips.length < 2) return undefined
@@ -691,7 +730,16 @@ function createBestStaggeredDiagonalPlacements(
             )
           })
         candidateOrder += 1
-        if (!placementsAreValid(placements, usableArea, stripGapMm)) continue
+        if (
+          !placementsAreValid(
+            placements,
+            usableArea,
+            stripGapMm,
+            reservedAreasMm,
+          )
+        ) {
+          continue
+        }
 
         const xPositionsMm = placements.map((placement) => placement.xMm)
         const meanXmm =
@@ -750,6 +798,9 @@ export function planPdfLayout(
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } =
     getPageDimensionsMm(pageSettings)
   const pageMarginsMm = getPageLayoutMarginsMm(pageSettings)
+  const reservedAreasMm = (options.reservedAreasMm ?? []).map((area) => ({
+    ...area,
+  }))
   const usableArea: RectMm = {
     xMm: pageMarginsMm.leftMm,
     yMm: pageMarginsMm.bottomMm,
@@ -802,6 +853,7 @@ export function planPdfLayout(
             usableArea,
             orientation,
             stripGapMm,
+            reservedAreasMm,
           )
           if (placement) break
         }
@@ -830,6 +882,7 @@ export function planPdfLayout(
           pages.length,
           usableArea,
           stripGapMm,
+          reservedAreasMm,
         )
         if (staggeredPlacements) {
           pages.push({
@@ -855,6 +908,7 @@ export function planPdfLayout(
         usableArea,
         orientations[0],
         stripGapMm,
+        reservedAreasMm,
       )
     }
 
@@ -873,6 +927,7 @@ export function planPdfLayout(
     stripGapMm,
     pageMarginsMm,
     usableArea,
+    reservedAreasMm,
     placements,
   }
 }

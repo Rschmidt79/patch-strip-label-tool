@@ -16,6 +16,10 @@ const escapedAppVersion = expectedAppVersion.replace(
 const versionBuildPattern = new RegExp(
   `^v${escapedAppVersion} · Build \\d{4}-\\d{2}-\\d{2}$`,
 )
+const expectedTitle = 'Free Rack Label Maker – 19" Rack & Patch Panel Labels'
+const expectedDescription =
+  'Design physically accurate 19-inch rack and patch panel labels free in your browser. Export printable PDFs for A4, A3, US Letter, US Legal, and more.'
+const publicUrl = 'https://labels.rschmidt.dk/'
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
@@ -183,13 +187,17 @@ try {
     'Application did not load',
   )
 
-  const betaUi = await execute(
-    `return { title: document.title, description: document.querySelector('meta[name="description"]')?.content, beta: document.querySelector('.beta-badge')?.textContent.trim(), version: document.querySelector('.app-footer > span')?.textContent.replace(/\\s+/g, ' ').trim() };`,
+  const releaseUi = await execute(
+    `const data = document.querySelector('script[type="application/ld+json"]'); return { title: document.title, description: document.querySelector('meta[name="description"]')?.content, canonical: document.querySelector('link[rel="canonical"]')?.href, robots: document.querySelector('meta[name="robots"]')?.content, openGraphUrl: document.querySelector('meta[property="og:url"]')?.content, structuredData: data ? JSON.parse(data.textContent) : undefined, beta: document.querySelector('.beta-badge')?.textContent.trim(), version: document.querySelector('.app-footer > span')?.textContent.replace(/\\s+/g, ' ').trim() };`,
   )
-  assert(betaUi.title === 'Rack Label Maker', 'Production HTML title is incorrect')
-  assert(betaUi.description?.includes('true-size rack'), 'Production meta description is missing')
-  assert(betaUi.beta === 'Beta', 'Beta indicator is missing')
-  assert(versionBuildPattern.test(betaUi.version), 'Version/build footer is incorrect')
+  assert(releaseUi.title === expectedTitle, 'Production HTML title is incorrect')
+  assert(releaseUi.description === expectedDescription, 'Production meta description is incorrect')
+  assert(releaseUi.canonical === publicUrl, 'Production canonical URL is incorrect')
+  assert(releaseUi.robots === 'index, follow', 'Production robots directive is incorrect')
+  assert(releaseUi.openGraphUrl === publicUrl, 'Production Open Graph URL is incorrect')
+  assert(releaseUi.structuredData?.['@graph']?.some((entry) => entry['@type'] === 'WebApplication' && entry.url === publicUrl), 'Production WebApplication JSON-LD is incorrect')
+  assert(releaseUi.beta === undefined, 'Beta indicator is still visible')
+  assert(versionBuildPattern.test(releaseUi.version), 'Version/build footer is incorrect')
 
   await selectCell(0)
   const emptyDefaults = await execute(
@@ -342,13 +350,14 @@ try {
   await clickStripButton(0, 'Duplicate')
 
   const packedPreview = await execute(
-    `const cards = document.querySelectorAll('.page-layout-preview .page-preview-card'); const preview = cards[0]?.querySelector('svg'); return { pages: cards.length, aria: preview?.getAttribute('aria-label'), headers: document.querySelectorAll('.page-layout-preview .group-header-copy').length, stripGroups: preview?.querySelectorAll(':scope > .page-preview-strip').length, supportDecorations: preview?.querySelectorAll(':scope > .page-preview-support').length, editorIndices: document.querySelectorAll('.page-layout-preview .cell-index-row').length, editorIndexMarkers: document.querySelectorAll('.page-layout-preview [data-editor-only="cell-indices"]').length };`,
+    `const cards = document.querySelectorAll('.page-layout-preview .page-preview-card'); const preview = cards[0]?.querySelector('svg'); const cutGuideFieldset = [...document.querySelectorAll('.print-layout-settings fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent.trim() === 'Cut guides'); return { pages: cards.length, aria: preview?.getAttribute('aria-label'), headers: document.querySelectorAll('.page-layout-preview .group-header-copy').length, stripGroups: preview?.querySelectorAll(':scope > .page-preview-strip').length, supportDecorations: preview?.querySelectorAll(':scope > .page-preview-support').length, editorIndices: document.querySelectorAll('.page-layout-preview .cell-index-row').length, editorIndexMarkers: document.querySelectorAll('.page-layout-preview [data-editor-only="cell-indices"]').length, cutGuideLabels: [...(cutGuideFieldset?.querySelectorAll('label') ?? [])].map((label) => label.textContent.replace(/\s+/g, ' ').trim()), cutGuideCheckboxes: cutGuideFieldset?.querySelectorAll('input[type="checkbox"]').length };`,
   )
   assert(packedPreview.pages === 1, 'Two 432 mm strips did not share one A3 page')
   assert(packedPreview.aria === 'Page 1 layout with 2 strips', 'Page preview did not use the shared two-strip placement plan')
   assert(packedPreview.headers === 2 && packedPreview.stripGroups === 2, 'Page preview did not render both strips and headers')
   assert(packedPreview.supportDecorations === 1, 'Enabled support QR was not shown in the reserved preview area')
   assert(packedPreview.editorIndices === 0 && packedPreview.editorIndexMarkers === 0, 'Editor indices leaked into page preview')
+  assert(packedPreview.cutGuideCheckboxes === 1 && JSON.stringify(packedPreview.cutGuideLabels) === JSON.stringify(['Cut lines']), 'Print layout did not expose exactly one Cut lines toggle')
 
   const selectedForJoin = await execute(
     `const inputs = [...document.querySelectorAll('.strip-card .join-strip-toggle input')]; inputs.forEach((input) => input.click()); return inputs.length;`,
@@ -469,7 +478,7 @@ try {
     `const dialog = document.querySelector('.about-dialog'); const text = dialog?.textContent.replace(/\\s+/g, ' ').trim() ?? ''; const support = [...(dialog?.querySelectorAll('a') ?? [])].find((item) => item.textContent.includes('Buy me a coffee')); return { title: dialog?.querySelector('h2')?.textContent, text, supportHref: support?.getAttribute('href'), supportTarget: support?.getAttribute('target'), supportRel: support?.getAttribute('rel'), version: dialog?.querySelector('.about-version')?.textContent.replace(/\\s+/g, ' ').trim() };`,
   )
   assert(aboutState.title === 'Rack Label Maker', 'Help/About did not open')
-  for (const requiredText of ['true physical dimensions', '100% / Actual Size', 'Do not use Fit or Shrink', 'Shift-click', '{n}', '# button', 'saved', 'inside the configured physical strip height', 'entirely in your browser']) {
+  for (const requiredText of ['true physical dimensions', '100% / Actual Size', 'Do not use Fit or Shrink', 'Shift-click', '{n}', '# button', 'saved', 'inside the configured physical strip height', 'entirely in your browser', 'Automatic split printing for A4, US Letter, and US Legal', 'v0.9.0-beta']) {
     assert(aboutState.text.includes(requiredText), `Help/About is missing: ${requiredText}`)
   }
   assert(aboutState.supportHref === 'https://buymeacoffee.com/rschmidt', 'Help support URL is incorrect')
@@ -574,7 +583,7 @@ try {
     hostileInputsVerified: attackStrings.length,
     hostileProjectFile,
     supportQrPreview: packedPreview.supportDecorations,
-    betaUi,
+    releaseUi,
     helpAboutVerified: true,
     feedbackDraftVerified: true,
     supportUrl,

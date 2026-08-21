@@ -1,6 +1,8 @@
 import {
+  clip,
   concatTransformationMatrix,
   degrees,
+  endPath,
   grayscale,
   PDFDocument,
   type PDFFont,
@@ -8,6 +10,7 @@ import {
   type PDFPage,
   popGraphicsState,
   pushGraphicsState,
+  rectangle,
   rgb,
   StandardFonts,
 } from 'pdf-lib'
@@ -43,11 +46,14 @@ import {
   type PrintPreferences,
 } from './print-preferences'
 import {
-  getSafeSupportQrDecorationGeometryMm,
   SUPPORT_QR_LABEL_LINE_1,
   SUPPORT_QR_LABEL_LINE_2,
   type SupportQrDecorationGeometryMm,
 } from './support-qr'
+import {
+  getPrintSegmentJoinLabel,
+  type PrintStripSegment,
+} from './print-segments'
 import {
   degreesToRadians,
   getRotationOriginForBoundsMm,
@@ -389,11 +395,15 @@ function drawStrip(
   page: PDFPage,
   strip: LabelStrip,
   placement: PdfStripPlacement,
+  segment: PrintStripSegment,
   regularFont: PDFFont,
   boldFont: PDFFont,
 ): void {
   const transform = getPdfStripTransform(placement)
-  const widthPt = millimetersToPoints(placement.widthMm)
+  const printedWidthPt = millimetersToPoints(placement.widthMm)
+  const sourceWidthPt = millimetersToPoints(strip.rows[0].dimensions.widthMm)
+  const contentWidthPt = millimetersToPoints(segment.contentWidthMm)
+  const sourceStartPt = millimetersToPoints(segment.sourceStartMm)
   const heightPt = millimetersToPoints(placement.heightMm)
   const rowTopOffsetsMm = getStripRowTopOffsetsMm(strip)
   const rowsWithBottomMm = strip.rows.map((row, index) => ({
@@ -421,10 +431,18 @@ function drawStrip(
   page.drawRectangle({
     x: 0,
     y: 0,
-    width: widthPt,
+    width: printedWidthPt,
     height: heightPt,
     color: rgb(1, 1, 1),
   })
+
+  page.pushOperators(
+    pushGraphicsState(),
+    rectangle(0, 0, contentWidthPt, heightPt),
+    clip(),
+    endPath(),
+    concatTransformationMatrix(1, 0, 0, 1, -sourceStartPt, 0),
+  )
 
   rowsWithBottomMm.forEach(({ row, bottomMm }) => {
     const cellWidthPt = millimetersToPoints(getCellWidthMm(row))
@@ -495,7 +513,61 @@ function drawStrip(
   page.drawRectangle({
     x: 0,
     y: 0,
-    width: widthPt,
+    width: sourceWidthPt,
+    height: heightPt,
+    borderColor: grayscale(0.05),
+    borderWidth: millimetersToPoints(0.18),
+  })
+
+  page.pushOperators(popGraphicsState())
+
+  if (segment.glueTabWidthMm > 0) {
+    const glueXPt = contentWidthPt
+    const glueWidthPt = millimetersToPoints(segment.glueTabWidthMm)
+    page.drawRectangle({
+      x: glueXPt,
+      y: 0,
+      width: glueWidthPt,
+      height: heightPt,
+      color: rgb(1, 1, 1),
+      borderColor: grayscale(0.48),
+      borderWidth: millimetersToPoints(0.12),
+    })
+    page.drawLine({
+      start: { x: glueXPt, y: 0 },
+      end: { x: glueXPt, y: heightPt },
+      thickness: millimetersToPoints(0.22),
+      color: grayscale(0.2),
+      dashArray: [millimetersToPoints(1), millimetersToPoints(0.8)],
+    })
+    const glueLabelSizePt = 3.2
+    const joinLabel = getPrintSegmentJoinLabel(segment)
+    const glueLabels = ['GLUE', joinLabel].filter(
+      (label): label is string => Boolean(label),
+    )
+    const lineHeightPt = regularFont.heightAtSize(glueLabelSizePt) + 0.6
+    const labelBlockHeightPt = lineHeightPt * glueLabels.length
+    glueLabels.forEach((label, index) => {
+      const labelWidthPt = regularFont.widthOfTextAtSize(
+        label,
+        glueLabelSizePt,
+      )
+      page.drawText(label, {
+        x: glueXPt + (glueWidthPt - labelWidthPt) / 2,
+        y:
+          (heightPt + labelBlockHeightPt) / 2 -
+          lineHeightPt * (index + 1),
+        size: glueLabelSizePt,
+        font: regularFont,
+        color: grayscale(0.45),
+      })
+    })
+  }
+
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: printedWidthPt,
     height: heightPt,
     borderColor: grayscale(0.05),
     borderWidth: millimetersToPoints(0.18),
@@ -521,48 +593,38 @@ export async function createLabelsPdf(
 
   const regularFont = await pdf.embedFont(StandardFonts.Helvetica)
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const supportGeometries = Array.from(
-    { length: plan.pageCount },
-    (_, pageIndex) =>
-      getSafeSupportQrDecorationGeometryMm(
-        plan.pageWidthMm,
-        plan.pageHeightMm,
-        plan.placements.filter(
-          (placement) => placement.pageIndex === pageIndex,
-        ),
-      ),
+  const supportQrImage = await pdf.embedPng(
+    decodePngDataUrl(supportQrDataUrl),
   )
-  const supportQrImage = supportGeometries.some(Boolean)
-    ? await pdf.embedPng(decodePngDataUrl(supportQrDataUrl))
-    : undefined
-  const pages = Array.from({ length: plan.pageCount }, (_, pageIndex) => {
+  const pages = Array.from({ length: plan.pageCount }, () => {
     const page = pdf.addPage([
       millimetersToPoints(plan.pageWidthMm),
       millimetersToPoints(plan.pageHeightMm),
     ])
     drawPrintNotice(page, plan.pageHeightMm, plan.pageMarginsMm, boldFont)
-    const supportGeometry = supportGeometries[pageIndex]
-    if (supportGeometry && supportQrImage) {
-      drawSupportQrDecoration(
-        page,
-        supportGeometry,
-        supportQrImage,
-        regularFont,
-        boldFont,
-      )
-    }
+    drawSupportQrDecoration(
+      page,
+      plan.supportArea,
+      supportQrImage,
+      regularFont,
+      boldFont,
+    )
     return page
   })
 
   for (const placement of plan.placements) {
-    const strip = project.strips.find(
+    const segment = plan.printSegments.find(
       (candidate) => candidate.id === placement.stripId,
     )
-    if (!strip) continue
+    const strip = segment
+      ? project.strips.find((candidate) => candidate.id === segment.stripId)
+      : undefined
+    if (!strip || !segment) continue
     drawStrip(
       pages[placement.pageIndex],
       strip,
       placement,
+      segment,
       regularFont,
       boldFont,
     )
@@ -571,7 +633,7 @@ export async function createLabelsPdf(
   for (const guides of plan.pageGuides) {
     const page = pages[guides.pageIndex]
     guides.cutLines.forEach((segment) =>
-      drawGuideLine(page, segment, CUT_LINE_WIDTH_MM, 0.02),
+      drawGuideLine(page, segment, CUT_LINE_WIDTH_MM, 0),
     )
     guides.cropMarks.forEach((segment) =>
       drawGuideLine(page, segment, CROP_MARK_WIDTH_MM, 0.22),

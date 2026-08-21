@@ -37,8 +37,11 @@ export function AboutDialog({
             <span className="eyebrow">Help / About</span>
             <h2 id="about-dialog-title">{APP_NAME}</h2>
             <p>
-              Create editable rack and patch-panel labels at true physical
-              dimensions, entirely in your browser.
+              A free browser-based rack label maker for designing printable
+              labels for 19-inch racks, patch panels, and professional audio
+              or broadcast equipment at true physical dimensions. Export
+              print-ready PDFs for A4, A3, US Letter, US Legal, and other
+              supported paper sizes.
             </p>
           </div>
           <button
@@ -84,12 +87,20 @@ export function AboutDialog({
           <article>
             <h4>v{APP_VERSION}</h4>
             <ul>
-              <li>Multi-row strips</li>
-              <li>Join and split rows</li>
-              <li>Smarter crop/cut-marker handling</li>
-              <li>Group-header background colours</li>
-              <li>Improved range-selection discoverability</li>
-              <li>Refined cell focus indication</li>
+              <li>Automatic split printing for A4, US Letter, and US Legal</li>
+              <li>Physical glue tabs and assembly guidance</li>
+              <li>Reserved page area with a larger support QR</li>
+              <li>Stable 1.0 release</li>
+            </ul>
+          </article>
+          <article>
+            <h4>v0.9.0-beta</h4>
+            <ul>
+              <li>Redesigned Inspector with clearer selection actions</li>
+              <li>Direct header selection and editing</li>
+              <li>Visible Auto numbering workflow</li>
+              <li>Fast one-, two-, and three-row strip setup</li>
+              <li>Side-by-side Print layout controls and Page Preview</li>
             </ul>
           </article>
           <article>

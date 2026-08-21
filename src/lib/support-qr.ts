@@ -6,17 +6,20 @@ import {
   getRotatedRectangleCornersMm,
   polygonsMaintainGapMm,
   type PointMm,
+  type RectMm,
 } from './geometry'
 
-export const SUPPORT_QR_LABEL_LINE_1 = 'Like the tool?'
-export const SUPPORT_QR_LABEL_LINE_2 = 'Buy me a coffee'
-export const SUPPORT_QR_BOX_SIZE_MM = 13
+export const SUPPORT_QR_LABEL_LINE_1 =
+  'Rack Label Maker is free to use.'
+export const SUPPORT_QR_LABEL_LINE_2 =
+  'Your support helps keep it alive.'
+export const SUPPORT_QR_BOX_SIZE_MM = 20
 export const SUPPORT_QR_IMAGE_INSET_MM = 1
 export const SUPPORT_QR_CLEARANCE_MM = 2
 
 const SUPPORT_QR_EDGE_MARGIN_MM = 5
-const SUPPORT_QR_TEXT_WIDTH_MM = 36
-const SUPPORT_QR_TEXT_GAP_MM = 2
+const SUPPORT_QR_TEXT_WIDTH_MM = 48
+const SUPPORT_QR_TEXT_GAP_MM = 3
 
 export interface SupportQrDecorationGeometryMm {
   xMm: number
@@ -32,11 +35,12 @@ export interface SupportQrDecorationGeometryMm {
   boundsYmm: number
   boundsWidthMm: number
   boundsHeightMm: number
+  reservedAreaMm: RectMm
 }
 
 /**
- * Returns the fixed bottom-right page-decoration candidate. This geometry is
- * evaluated only after strip packing, so it can never move or scale labels.
+ * Returns the fixed bottom-right support decoration and the slightly larger
+ * print-only area which packing must keep clear.
  */
 export function getSupportQrDecorationGeometryMm(
   pageWidthMm: number,
@@ -47,6 +51,8 @@ export function getSupportQrDecorationGeometryMm(
   const yMm = SUPPORT_QR_EDGE_MARGIN_MM
   const textLeftMm =
     xMm - SUPPORT_QR_TEXT_GAP_MM - SUPPORT_QR_TEXT_WIDTH_MM
+  const boundsWidthMm =
+    xMm + SUPPORT_QR_BOX_SIZE_MM - textLeftMm
 
   if (
     xMm < SUPPORT_QR_EDGE_MARGIN_MM ||
@@ -70,9 +76,14 @@ export function getSupportQrDecorationGeometryMm(
     textWidthMm: SUPPORT_QR_TEXT_WIDTH_MM,
     boundsXmm: textLeftMm,
     boundsYmm: yMm,
-    boundsWidthMm:
-      xMm + SUPPORT_QR_BOX_SIZE_MM - textLeftMm,
+    boundsWidthMm,
     boundsHeightMm: SUPPORT_QR_BOX_SIZE_MM,
+    reservedAreaMm: {
+      xMm: textLeftMm - SUPPORT_QR_CLEARANCE_MM,
+      yMm: yMm - SUPPORT_QR_CLEARANCE_MM,
+      widthMm: boundsWidthMm + SUPPORT_QR_CLEARANCE_MM * 2,
+      heightMm: SUPPORT_QR_BOX_SIZE_MM + SUPPORT_QR_CLEARANCE_MM * 2,
+    },
   }
 }
 
@@ -87,20 +98,33 @@ export function getSupportQrDecorationPolygonMm(
   )
 }
 
+export function getSupportQrReservedAreaPolygonMm(
+  geometry: SupportQrDecorationGeometryMm,
+): PointMm[] {
+  const area = geometry.reservedAreaMm
+  return getRotatedRectangleCornersMm(
+    area.widthMm,
+    area.heightMm,
+    0,
+    { xMm: area.xMm, yMm: area.yMm },
+  )
+}
+
 export function isSupportQrDecorationSafe(
   geometry: SupportQrDecorationGeometryMm,
   placements: readonly PdfStripPlacement[],
 ): boolean {
-  const decorationPolygon = getSupportQrDecorationPolygonMm(geometry)
+  const reservedPolygon = getSupportQrReservedAreaPolygonMm(geometry)
   return placements.every((placement) =>
     polygonsMaintainGapMm(
-      decorationPolygon,
+      reservedPolygon,
       getPlacementPolygonMm(placement),
-      SUPPORT_QR_CLEARANCE_MM,
+      0,
     ),
   )
 }
 
+/** Compatibility helper for callers which already have placements. */
 export function getSafeSupportQrDecorationGeometryMm(
   pageWidthMm: number,
   pageHeightMm: number,

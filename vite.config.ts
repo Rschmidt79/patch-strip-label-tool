@@ -24,7 +24,7 @@ export default defineConfig({
       manifest: RACK_LABEL_MAKER_MANIFEST,
       workbox: {
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{html,js,css,svg,png,ico}'],
+        globPatterns: ['**/*.{html,js,css,svg,png,ico,txt,xml}'],
         navigateFallback: 'index.html',
         runtimeCaching: [],
       },

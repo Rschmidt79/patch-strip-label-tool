@@ -4,6 +4,8 @@ import {
   PDFDocument,
   PDFRawStream,
 } from 'pdf-lib'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { PageLayoutPreview } from '../src/components/PageLayoutPreview'
@@ -11,8 +13,10 @@ import { millimetersToPoints } from '../src/lib/dimensions'
 import { createLabelsPdf } from '../src/lib/pdf-export'
 import { planPrintLayout } from '../src/lib/print-layout'
 import {
+  CROP_MARK_WIDTH_MM,
   CROP_MARK_LENGTH_MM,
   CROP_MARK_OFFSET_MM,
+  CUT_LINE_WIDTH_MM,
   segmentEntersPolygonInteriorMm,
 } from '../src/lib/cut-guides'
 import { getPlacementPolygonMm } from '../src/lib/pdf-layout'
@@ -42,6 +46,32 @@ function getDecodedPageContent(pdf: PDFDocument, pageIndex: number): string {
 }
 
 describe('shared print layout plan', () => {
+  it('places print settings beside the existing page preview responsively', () => {
+    const project = createProject()
+    const plan = planPrintLayout(project, DEFAULT_PRINT_PREFERENCES)
+    const markup = renderToStaticMarkup(
+      <PageLayoutPreview
+        project={project}
+        preferences={DEFAULT_PRINT_PREFERENCES}
+        plan={plan}
+        error={undefined}
+        onPreferencesChange={() => undefined}
+      />,
+    )
+    const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8')
+
+    expect(markup.indexOf('class="print-layout-settings"')).toBeLessThan(
+      markup.indexOf('class="page-preview-grid"'),
+    )
+    expect(markup).toContain('class="page-layout-preview-body"')
+    expect(styles).toMatch(
+      /\.page-layout-preview-body\s*{[^}]*grid-template-columns:\s*minmax\(280px, 2fr\) minmax\(0, 3fr\)/s,
+    )
+    expect(styles).toMatch(
+      /@media \(max-width: 1180px\)[\s\S]*?\.page-layout-preview-body\s*{\s*grid-template-columns:\s*minmax\(0, 1fr\)/,
+    )
+  })
+
   it('offers every registered paper size in the page selector', () => {
     const project = createProject()
     const markup = renderToStaticMarkup(
@@ -58,6 +88,30 @@ describe('shared print layout plan', () => {
       expect(markup).toContain(`value="${size}"`)
       expect(markup).toContain(getPageSizeDisplayName(size))
     }
+  })
+
+  it('exposes crop-mark geometry as the single user-facing Cut lines toggle', () => {
+    const project = createProject()
+    const preferences = {
+      ...DEFAULT_PRINT_PREFERENCES,
+      cutLines: false,
+      cropMarks: true,
+    }
+    const markup = renderToStaticMarkup(
+      <PageLayoutPreview
+        project={project}
+        preferences={preferences}
+        plan={planPrintLayout(project, preferences)}
+        error={undefined}
+        onPreferencesChange={() => undefined}
+      />,
+    )
+
+    expect(markup.match(/>Cut lines</g)).toHaveLength(1)
+    expect(markup).not.toContain('Crop marks')
+    expect(markup).toContain(
+      '<input type="checkbox" checked=""/><span>Cut lines</span>',
+    )
   })
 
   it('keeps the 432 mm SRA3 strip horizontal with crop marks inside the page', () => {
@@ -176,6 +230,16 @@ describe('shared print layout plan', () => {
     )
     expect(markup).toContain('page-preview-crop-mark')
 
+    const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8')
+    expect(CUT_LINE_WIDTH_MM).toBe(0.24)
+    expect(CROP_MARK_WIDTH_MM).toBe(0.16)
+    expect(styles).toMatch(
+      /\.page-preview-cut-line\s*{[^}]*stroke:\s*#000;[^}]*stroke-width:\s*0\.24;/s,
+    )
+    expect(styles).toMatch(
+      /\.page-preview-crop-mark\s*{[^}]*stroke:\s*#363b38;[^}]*stroke-width:\s*0\.16;/s,
+    )
+
     const bytes = await createLabelsPdf(project, preferences, plan)
     const pdf = await PDFDocument.load(bytes)
     const content = getDecodedPageContent(pdf, 0)
@@ -185,6 +249,8 @@ describe('shared print layout plan', () => {
     expect(content).toContain(
       `${millimetersToPoints(firstCutLine.end.xMm)} ${millimetersToPoints(firstCutLine.end.yMm)} l`,
     )
+    expect(content).toContain(`${millimetersToPoints(CUT_LINE_WIDTH_MM)} w`)
+    expect(content).toContain(`${millimetersToPoints(CROP_MARK_WIDTH_MM)} w`)
   })
 
   it('can disable guide types without changing strip placement', () => {
