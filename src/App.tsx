@@ -12,10 +12,10 @@ import {
   getStripJoinError,
   joinStrips,
   removeStrip,
-  resizeStripRows,
   splitStripRows,
   updateStripRow,
 } from './lib/strip'
+import { applyStripRowCountChange } from './lib/row-count-change'
 import {
   applyCellAppearanceToRange,
   resetCellRangeStyle,
@@ -628,7 +628,10 @@ export function App() {
       return
     }
 
-    const resized = resizeStripRows(source, rowCount)
+    const resized = applyStripRowCountChange(source, rowCount, (message) =>
+      window.confirm(message),
+    )
+    if (resized === source) return
     updateStrip(stripId, () => resized)
     const nextActiveRow =
       resized.rows.find((row) => row.id === activeRowId) ?? resized.rows.at(-1)
@@ -1122,6 +1125,7 @@ export function App() {
           onAddStrip={handleAddStrip}
           onToggleJoinSelection={handleToggleJoinSelection}
           onJoinStrips={handleJoinStrips}
+          onCancelJoin={() => setSelectedJoinStripIds([])}
           onAddRow={handleAddRow}
           onSplitRows={handleSplitRows}
           onDuplicateStrip={handleDuplicateStrip}

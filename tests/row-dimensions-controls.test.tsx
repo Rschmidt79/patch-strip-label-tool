@@ -1,12 +1,19 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { RowDimensionsControls } from '../src/components/RowDimensionsControls'
+import { shouldCommitNumberFieldBlur } from '../src/lib/number-field'
 import { resizeStripRows } from '../src/lib/strip'
 import { createStrip } from '../src/model/defaults'
 
 const noOp = () => undefined
 
 describe('strip row setup controls', () => {
+  it('does not commit a focused number draft after the active row changes', () => {
+    expect(shouldCommitNumberFieldBlur('row-a', 'row-a')).toBe(true)
+    expect(shouldCommitNumberFieldBlur('row-a', 'row-b')).toBe(false)
+    expect(shouldCommitNumberFieldBlur(undefined, undefined)).toBe(true)
+  })
+
   it('separates strip row count from active row selection', () => {
     const strip = createStrip('Rows', 432, 7.5, 16, 3)
     const markup = renderToStaticMarkup(

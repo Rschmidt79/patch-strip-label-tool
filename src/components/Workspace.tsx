@@ -60,6 +60,7 @@ interface WorkspaceProps {
   onAddStrip: (rowCount: 1 | 2 | 3) => void
   onToggleJoinSelection: (stripId: string) => void
   onJoinStrips: () => void
+  onCancelJoin: () => void
   onAddRow: (stripId: string) => void
   onSplitRows: (stripId: string) => void
   onDuplicateStrip: (stripId: string) => void
@@ -98,6 +99,7 @@ export function Workspace({
   onAddStrip,
   onToggleJoinSelection,
   onJoinStrips,
+  onCancelJoin,
   onAddRow,
   onSplitRows,
   onDuplicateStrip,
@@ -131,19 +133,12 @@ export function Workspace({
 
       <div className="strip-list">
         {selectedJoinStripIds.length > 0 && (
-          <div className="strip-join-bar" role="status">
-            <span>
-              {selectedJoinStripIds.length} selected for joining
-              {joinError ? ` · ${joinError}` : ' · Order follows the editor'}
-            </span>
-            <button
-              className="button button-small button-primary"
-              disabled={joinError !== undefined}
-              onClick={onJoinStrips}
-            >
-              Join strips
-            </button>
-          </div>
+          <StripJoinBar
+            selectedCount={selectedJoinStripIds.length}
+            error={joinError}
+            onJoin={onJoinStrips}
+            onCancel={onCancelJoin}
+          />
         )}
         {strips.map((strip, index) => (
           <StripCard
@@ -236,7 +231,7 @@ export function Workspace({
         <>
           <div className="add-strip-controls">
             <label className="add-strip-rows-field">
-              <span>New strip</span>
+              <span>New strip rows</span>
               <select
                 aria-label="Rows in new strip"
                 value={newStripRowCount}
@@ -266,5 +261,41 @@ export function Workspace({
         </>
       )}
     </main>
+  )
+}
+
+export function StripJoinBar({
+  selectedCount,
+  error,
+  onJoin,
+  onCancel,
+}: {
+  selectedCount: number
+  error: string | undefined
+  onJoin: () => void
+  onCancel: () => void
+}) {
+  return (
+    <section className="strip-join-bar" aria-label="Join existing strips">
+      <span className="strip-join-copy" role="status">
+        <strong>Join existing strips · {selectedCount} selected</strong>
+        <small>
+          {error ??
+            'Keeps each strip’s content and settings. Row order follows the editor.'}
+        </small>
+      </span>
+      <span className="strip-join-actions">
+        <button className="button button-small" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          className="button button-small button-primary"
+          disabled={error !== undefined}
+          onClick={onJoin}
+        >
+          Join selected
+        </button>
+      </span>
+    </section>
   )
 }

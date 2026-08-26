@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CELL_COLOR_PRESETS } from '../lib/cell-style'
 import { getContrastingTextColor } from '../lib/colors'
+import { shouldCommitNumberFieldBlur } from '../lib/number-field'
 import type { CellAppearance, TextAlignment } from '../model/project'
 
 interface NumberFieldProps {
@@ -10,6 +11,7 @@ interface NumberFieldProps {
   max: number
   step: number
   unit?: string
+  contextKey?: string
   onChange: (value: number) => void
 }
 
@@ -20,11 +22,13 @@ export function NumberField({
   max,
   step,
   unit,
+  contextKey,
   onChange,
 }: NumberFieldProps) {
   const formattedValue = String(Number(value.toFixed(3)))
   const [draft, setDraft] = useState(formattedValue)
   const inputRef = useRef<HTMLInputElement>(null)
+  const focusedContextKeyRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     if (document.activeElement !== inputRef.current) setDraft(formattedValue)
@@ -41,6 +45,9 @@ export function NumberField({
           min={min}
           max={max}
           step={step}
+          onFocus={() => {
+            focusedContextKeyRef.current = contextKey
+          }}
           onChange={(event) => {
             setDraft(event.target.value)
             const nextValue = Number(event.target.value)
@@ -54,6 +61,15 @@ export function NumberField({
             }
           }}
           onBlur={() => {
+            const shouldCommit = shouldCommitNumberFieldBlur(
+              focusedContextKeyRef.current,
+              contextKey,
+            )
+            focusedContextKeyRef.current = undefined
+            if (!shouldCommit) {
+              setDraft(formattedValue)
+              return
+            }
             const parsedValue = Number(draft)
             const nextValue = Number.isFinite(parsedValue)
               ? Math.min(max, Math.max(min, parsedValue))

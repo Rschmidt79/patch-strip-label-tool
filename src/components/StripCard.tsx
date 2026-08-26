@@ -134,6 +134,7 @@ export function StripCard({
               type="checkbox"
               checked={isSelectedForJoin}
               onChange={onToggleJoinSelection}
+              aria-label={`Select ${strip.name} to join with existing strips`}
             />
             Join
           </label>

@@ -1638,6 +1638,17 @@ input:disabled {
   .row-dimensions-panel > .field-row {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
+
+  .strip-join-bar {
+    width: calc(100vw - 334px);
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .strip-join-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .add-strip-button {
@@ -1691,6 +1702,9 @@ input:disabled {
 }
 
 .strip-join-bar {
+  position: sticky;
+  z-index: 6;
+  top: 10px;
   display: flex;
   min-height: 44px;
   align-items: center;
@@ -1700,8 +1714,32 @@ input:disabled {
   border: 1px solid #4d5b38;
   border-radius: 6px;
   color: #b9c3a2;
-  background: rgba(53, 64, 32, 0.22);
+  background: rgba(29, 36, 24, 0.97);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
   font-size: 10px;
+}
+
+.strip-join-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.strip-join-copy strong {
+  color: #dce6bf;
+  font-size: 11px;
+}
+
+.strip-join-copy small {
+  color: #aeb995;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.strip-join-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
 }
 
 .add-strip-button span {

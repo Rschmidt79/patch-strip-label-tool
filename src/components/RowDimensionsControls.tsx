@@ -145,6 +145,7 @@ export function RowDimensionsControls({
             <NumberField
               label="Width"
               value={activeRow.dimensions.widthMm}
+              contextKey={activeRow.id}
               min={10}
               max={1200}
               step={0.1}
@@ -166,6 +167,7 @@ export function RowDimensionsControls({
             <NumberField
               label="Cell row height"
               value={activeRow.dimensions.heightMm}
+              contextKey={activeRow.id}
               min={3}
               max={100}
               step={0.1}
@@ -187,6 +189,7 @@ export function RowDimensionsControls({
             <NumberField
               label="Cells"
               value={activeRow.dimensions.cellCount}
+              contextKey={activeRow.id}
               min={1}
               max={64}
               step={1}
@@ -205,6 +208,7 @@ export function RowDimensionsControls({
               <NumberField
                 label="Internal header band"
                 value={activeRow.dimensions.groupHeaderBandHeightMm}
+                contextKey={activeRow.id}
                 min={0.5}
                 max={Math.max(0.5, activeRow.dimensions.heightMm - 0.5)}
                 step={0.1}
@@ -241,6 +245,7 @@ export function RowDimensionsControls({
                 <NumberField
                   label="Custom cell width"
                   value={activeRow.dimensions.customCellWidthMm}
+                  contextKey={activeRow.id}
                   min={1}
                   max={250}
                   step={0.1}
