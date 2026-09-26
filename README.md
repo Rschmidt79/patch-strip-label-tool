@@ -1,8 +1,29 @@
 # Rack Label Maker
 
-A completely client-side React application for designing and exporting true-size labels for broadcast racks, patch panels, and equipment. Projects and PDFs remain in the browser; there is no backend, account, database, analytics, cloud storage, or required server runtime.
+**Free, browser-based label maker for 19" racks, patch panels, and broadcast/AV/pro-audio equipment.**
 
-![Rack Label Maker with range-aware numbering](docs/range-selection-preview.png)
+👉 **Use it now: [labels.rschmidt.dk](https://labels.rschmidt.dk/)** (no account, no install, nothing uploaded)
+
+![Rack Label Maker editor with video router and audio stagebox strips](docs/editor-v1.png)
+
+Type straight into the label cells, press Tab to move on, and export a vector PDF that prints at true physical size. Everything runs in your browser; there is no backend, account, database, analytics, or cloud storage.
+
+## Features
+
+- **True-size strips in millimeters**, with presets such as a full-rack 432 mm × 16-cell strip and custom widths, heights, and cell counts
+- **One to three rows per strip** and group headers over a range of cells
+- **Auto numbering** with a `{n}` template (for example `CAM {n}` or `CH {n}`) applied only to the selected range
+- **Vector PDF export and Print** for A4, A3, SRA3, US Letter, US Legal, and US Tabloid, with automatic horizontal, vertical, or diagonal placement and shared cut lines; strips are never scaled
+- **Split printing with glue tabs** when a strip is longer than the paper
+- **Calibration PDF** with an exact 100 × 100 mm square to check your printer
+- **Project files** (`.racklabel`) you can save, share, and reopen
+- **Installable and offline-capable** as a PWA
+
+## Support the project
+
+Rack Label Maker is free and will stay free. If it saved you an afternoon of fiddling with spreadsheets and label printers, you can [☕ buy me a coffee](https://buymeacoffee.com/rschmidt). Starring the repository and sharing the tool with colleagues also helps.
+
+Found a bug or have an idea? Use **Send feedback** in the app footer or open an issue.
 
 ## Development
 
