@@ -71,6 +71,7 @@ import {
   createFeedbackMailto,
   PRINT_SCALING_BODY,
   PRINT_SCALING_TITLE,
+  SUPPORT_URL,
 } from './config/app-info'
 import {
   MAX_PROJECT_ROWS,
@@ -87,6 +88,7 @@ import {
 interface AppNotice {
   kind: 'success' | 'error'
   message: string
+  showSupportLink?: boolean
 }
 
 interface PageLayoutResult {
@@ -405,6 +407,7 @@ export function App() {
       setNotice({
         kind: 'success',
         message: `Created ${fileName} without scaling.${describePdfCharacterSubstitutions(project)}`,
+        showSupportLink: true,
       })
     } catch (error) {
       setNotice({
@@ -443,6 +446,7 @@ export function App() {
         kind: 'success',
         message:
           `PDF opened for printing. PRINT AT 100% / ACTUAL SIZE — DO NOT FIT OR SHRINK TO PAGE.${describePdfCharacterSubstitutions(project)}`,
+        showSupportLink: true,
       })
     } catch (error) {
       printWindow.close()
@@ -935,7 +939,22 @@ export function App() {
           className={`app-notice ${notice.kind}`}
           role={notice.kind === 'error' ? 'alert' : 'status'}
         >
-          <span>{notice.message}</span>
+          <span>
+            {notice.message}
+            {notice.showSupportLink && (
+              <>
+                {' '}
+                <a
+                  className="app-notice-support"
+                  href={SUPPORT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Saved you time? ☕ Buy me a coffee
+                </a>
+              </>
+            )}
+          </span>
           <button onClick={() => setNotice(undefined)} aria-label="Dismiss message">
             ×
           </button>

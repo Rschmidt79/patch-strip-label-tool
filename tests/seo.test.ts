@@ -33,7 +33,11 @@ describe('public search metadata', () => {
     expect(html).toContain(`content="${PUBLIC_URL}" />`)
     expect(html).toContain('property="og:title"')
     expect(html).toContain('property="og:description"')
-    expect(html).toContain('name="twitter:card" content="summary"')
+    expect(html).toContain('name="twitter:card" content="summary_large_image"')
+    expect(html).toContain(
+      `property="og:image" content="${PUBLIC_URL}og-image.png"`,
+    )
+    expect(readFileSync(join(process.cwd(), 'public/og-image.png')).length).toBeGreaterThan(0)
     expect(html.toLowerCase()).not.toContain('lemo')
   })
 
