@@ -7,6 +7,7 @@ interface ToolbarProps {
   projectName: string
   onProjectNameChange: (name: string) => void
   onNewProject: () => void
+  onLoadExample: () => void
   onOpenProject: (file: File) => void | Promise<void>
   onSaveProject: () => void
   onPrintPdf: () => void | Promise<void>
@@ -19,6 +20,7 @@ export function Toolbar({
   projectName,
   onProjectNameChange,
   onNewProject,
+  onLoadExample,
   onOpenProject,
   onSaveProject,
   onPrintPdf,
@@ -55,6 +57,13 @@ export function Toolbar({
       <nav className="toolbar-actions" aria-label="Project actions">
         <button className="button button-quiet" onClick={onNewProject}>
           New
+        </button>
+        <button
+          className="button button-quiet"
+          onClick={onLoadExample}
+          title="Replace the current project with a filled-in example"
+        >
+          Example
         </button>
         <button
           className="button button-quiet"

@@ -109,6 +109,8 @@ describe('untrusted project content', () => {
         projectName={attack}
         onProjectNameChange={() => undefined}
         onNewProject={() => undefined}
+      onLoadExample={() => undefined}
+        onLoadExample={() => undefined}
         onOpenProject={() => undefined}
         onSaveProject={() => undefined}
         onPrintPdf={() => undefined}

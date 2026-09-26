@@ -13,11 +13,16 @@ Type straight into the label cells, press Tab to move on, and export a vector PD
 - **True-size strips in millimeters**, with presets such as a full-rack 432 mm × 16-cell strip and custom widths, heights, and cell counts
 - **One to three rows per strip** and group headers over a range of cells
 - **Auto numbering** with a `{n}` template (for example `CAM {n}` or `CH {n}`) applied only to the selected range
-- **Vector PDF export and Print** for A4, A3, SRA3, US Letter, US Legal, and US Tabloid, with automatic horizontal, vertical, or diagonal placement and shared cut lines; strips are never scaled
+- **Automatic sheet layout.** Full-width 432 mm rack strips are placed diagonally when needed, so several fit whole on one A3 sheet without gluing. Strips are never scaled
+- **Vector PDF export and Print** for A4, A3, SRA3, US Letter, US Legal, and US Tabloid, with shared cut lines between touching strips
 - **Split printing with glue tabs** when a strip is longer than the paper
 - **Calibration PDF** with an exact 100 × 100 mm square to check your printer
 - **Project files** (`.racklabel`) you can save, share, and reopen
 - **Installable and offline-capable** as a PWA
+
+Click **Example** in the toolbar to load a filled-in OB truck rack and see it in Page layout preview:
+
+![Six rack strips arranged on one A3 landscape sheet, five of them rotated to fit](docs/a3-layout.png)
 
 ## Support the project
 
