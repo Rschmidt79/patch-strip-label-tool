@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   CSS_PX_PER_MM,
   getCellWidthMm,
@@ -12,6 +13,11 @@ import {
 } from '../lib/group-headers'
 import type { LabelCell, LabelStrip } from '../model/project'
 import { MAX_CELL_TEXT_LENGTH } from '../config/content-limits'
+import {
+  formatCellEditValue,
+  parseCellEditValue,
+  resolveCellEditValue,
+} from '../lib/cell-edit-text'
 import { CellIndexRow } from './CellIndexRow'
 import { StripArtwork } from './StripArtwork'
 
@@ -38,10 +44,6 @@ interface StripSvgEditorProps {
   onMoveCell: (rowId: string, cellId: string, direction: -1 | 1) => void
 }
 
-function editValue(cell: LabelCell): string {
-  return cell.line2 ? `${cell.line1}\n${cell.line2}` : cell.line1
-}
-
 interface CellTextareaEditorProps {
   cell: LabelCell
   index: number
@@ -57,11 +59,12 @@ function CellTextareaEditor({
   onMoveCell,
   onClearSelection,
 }: CellTextareaEditorProps) {
+  const [draft, setDraft] = useState(() => formatCellEditValue(cell))
   return (
     <textarea
       className="svg-cell-input"
       autoFocus
-      value={editValue(cell)}
+      value={resolveCellEditValue(cell, draft)}
       maxLength={MAX_CELL_TEXT_LENGTH * 2 + 1}
       aria-label={`Edit cell ${index + 1}, two lines maximum`}
       style={{
@@ -71,18 +74,8 @@ function CellTextareaEditor({
         color: cell.appearance.textColor,
       }}
       onChange={(event) => {
-        const rawValue = event.target.value.replace(/\r/g, '')
-        const firstBreak = rawValue.indexOf('\n')
-        const line1 = (
-          firstBreak === -1 ? rawValue : rawValue.slice(0, firstBreak)
-        ).slice(0, MAX_CELL_TEXT_LENGTH)
-        const line2 =
-          firstBreak === -1
-            ? ''
-            : rawValue
-                .slice(firstBreak + 1)
-                .replace(/\n/g, ' ')
-                .slice(0, MAX_CELL_TEXT_LENGTH)
+        const { line1, line2, value } = parseCellEditValue(event.target.value)
+        setDraft(value)
         onChangeCellText(cell.id, line1, line2)
       }}
       onKeyDown={(event) => {
@@ -232,7 +225,9 @@ export function StripSvgEditor({
                         return
                       }
                       event.stopPropagation()
-                      if (event.shiftKey) event.preventDefault()
+                      // Keep the browser from moving focus to this group
+                      // after the edit textarea has auto-focused.
+                      event.preventDefault()
                       onSelectCell(row.id, cell.id, event.shiftKey)
                     }}
                     onKeyDown={(event) => {

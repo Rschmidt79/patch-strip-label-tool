@@ -26,6 +26,7 @@ import {
   millimetersToPoints,
 } from './dimensions'
 import { hexToRgb } from './colors'
+import { toPdfText } from './pdf-text'
 import {
   getCellContentGeometryMm,
   getGroupHeaderGeometryMm,
@@ -287,7 +288,7 @@ function drawCellText(
   regularFont: PDFFont,
   boldFont: PDFFont,
 ): void {
-  const textLines = [cell.line1, cell.line2].filter(Boolean)
+  const textLines = [cell.line1, cell.line2].map(toPdfText).filter(Boolean)
   if (textLines.length === 0) return
 
   const font = cell.style.fontWeight === 'bold' ? boldFont : regularFont
@@ -355,21 +356,22 @@ function drawGroupHeaderText(
   regularFont: PDFFont,
   boldFont: PDFFont,
 ): void {
-  if (!header.text) return
+  const text = toPdfText(header.text)
+  if (!text) return
   const font = header.style.fontWeight === 'bold' ? boldFont : regularFont
   const maximumWidthPt = Math.max(
     0.1,
     widthPt - millimetersToPoints(LABEL_HORIZONTAL_PADDING_MM * 2),
   )
   const sizePt = fitPdfFontSize(
-    header.text,
+    text,
     font,
     header.style.fontSizePt,
     maximumWidthPt,
     heightPt * 0.62,
     true,
   )
-  const textWidthPt = font.widthOfTextAtSize(header.text, sizePt)
+  const textWidthPt = font.widthOfTextAtSize(text, sizePt)
   const textHeightPt = font.heightAtSize(sizePt)
   const textXPt =
     header.style.alignment === 'left'
@@ -382,7 +384,7 @@ function drawGroupHeaderText(
         : xPt + (widthPt - textWidthPt) / 2
   const textColor = hexToRgb(header.style.textColor)
 
-  page.drawText(header.text, {
+  page.drawText(text, {
     x: textXPt,
     y: yPt + (heightPt - textHeightPt) / 2,
     size: sizePt,

@@ -39,6 +39,7 @@ import {
   openPdfBytesInWindow,
 } from './lib/download'
 import { planPrintLayout, type PrintLayoutPlan } from './lib/print-layout'
+import { findPdfUnsupportedCharacters } from './lib/pdf-text'
 import {
   ProjectFileError,
   readProjectFileWithCompatibility,
@@ -91,6 +92,13 @@ interface AppNotice {
 interface PageLayoutResult {
   plan?: PrintLayoutPlan
   error?: string
+}
+
+function describePdfCharacterSubstitutions(project: LabelProject): string {
+  const characters = findPdfUnsupportedCharacters(project)
+  return characters.length === 0
+    ? ''
+    : ` Characters the PDF font cannot print were replaced: ${characters.join(' ')}`
 }
 
 function getBrowserStorage(): StorageLike | undefined {
@@ -394,7 +402,10 @@ export function App() {
       )
       const fileName = createLabelsPdfFileName(project.name)
       downloadBytes(bytes, fileName, 'application/pdf')
-      setNotice({ kind: 'success', message: `Created ${fileName} without scaling.` })
+      setNotice({
+        kind: 'success',
+        message: `Created ${fileName} without scaling.${describePdfCharacterSubstitutions(project)}`,
+      })
     } catch (error) {
       setNotice({
         kind: 'error',
@@ -431,7 +442,7 @@ export function App() {
       setNotice({
         kind: 'success',
         message:
-          'PDF opened for printing. PRINT AT 100% / ACTUAL SIZE — DO NOT FIT OR SHRINK TO PAGE.',
+          `PDF opened for printing. PRINT AT 100% / ACTUAL SIZE — DO NOT FIT OR SHRINK TO PAGE.${describePdfCharacterSubstitutions(project)}`,
       })
     } catch (error) {
       printWindow.close()
