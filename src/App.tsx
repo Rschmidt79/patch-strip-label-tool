@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
 import { Workspace } from './components/Workspace'
 import { createProject, createStrip } from './model/defaults'
+import { createExampleProject } from './lib/example-project'
 import {
   addStripRow,
   duplicateStrip,
@@ -310,6 +311,26 @@ export function App() {
     setSelectedJoinStripIds([])
     clearSelection()
     setNotice({ kind: 'success', message: 'New project created.' })
+  }
+
+  function handleLoadExample() {
+    if (
+      !window.confirm(
+        'Load the example project? Unsaved editor changes will be lost.',
+      )
+    )
+      return
+    const nextProject = createExampleProject()
+    setProject(nextProject)
+    setActiveStripId(nextProject.strips[0]?.id)
+    setActiveRowId(nextProject.strips[0]?.rows[0]?.id)
+    setSelectedJoinStripIds([])
+    clearSelection()
+    setNotice({
+      kind: 'success',
+      message:
+        'Example loaded. Open Page layout preview to see how the strips are arranged on the sheet at true size.',
+    })
   }
 
   function handleSaveProject() {
@@ -927,6 +948,7 @@ export function App() {
           updateProject((current) => ({ ...current, name }))
         }
         onNewProject={handleNewProject}
+        onLoadExample={handleLoadExample}
         onOpenProject={(file) => loadProjectFileIntoEditor(file, true)}
         onSaveProject={handleSaveProject}
         onPrintPdf={() => setShowPrintReminder(true)}

@@ -24,6 +24,7 @@ function renderToolbar(): string {
       projectName="FlyAway"
       onProjectNameChange={() => undefined}
       onNewProject={() => undefined}
+      onLoadExample={() => undefined}
       onOpenProject={() => undefined}
       onSaveProject={() => undefined}
       onPrintPdf={() => undefined}
