@@ -87,6 +87,24 @@ export function AboutDialog({
           <article>
             <h4>v{APP_VERSION}</h4>
             <ul>
+              <li>Press Enter in a cell to start line 2</li>
+              <li>Type immediately after the first click on a cell</li>
+              <li>
+                PDF export no longer fails on symbols such as → ≥ Ω ✓; they
+                are replaced and listed after export
+              </li>
+            </ul>
+          </article>
+          <article>
+            <h4>v1.0.1</h4>
+            <ul>
+              <li>Safer multi-row editing</li>
+              <li>Improved strip join workflow</li>
+            </ul>
+          </article>
+          <article>
+            <h4>v1.0.0</h4>
+            <ul>
               <li>Automatic split printing for A4, US Letter, and US Legal</li>
               <li>Physical glue tabs and assembly guidance</li>
               <li>Reserved page area with a larger support QR</li>
