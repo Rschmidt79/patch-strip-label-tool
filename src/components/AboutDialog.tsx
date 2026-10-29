@@ -77,7 +77,8 @@ export function AboutDialog({
             </li>
             <li>
               Label data stays in this browser; the application has no backend
-              or cloud project storage.
+              or cloud project storage. Only anonymous, cookie-free page views
+              are counted with Vercel Web Analytics.
             </li>
           </ul>
         </div>

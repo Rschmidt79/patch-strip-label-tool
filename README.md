@@ -6,7 +6,7 @@
 
 ![Rack Label Maker editor with video router and audio stagebox strips](docs/editor-v1.png)
 
-Type straight into the label cells, press Tab to move on, and export a vector PDF that prints at true physical size. Everything runs in your browser; there is no backend, account, database, analytics, or cloud storage.
+Type straight into the label cells, press Tab to move on, and export a vector PDF that prints at true physical size. Everything runs in your browser; there is no backend, account, database, or cloud storage. The only thing measured is anonymous page views through cookie-free [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy); label content never leaves your browser.
 
 ## Features
 
@@ -167,4 +167,4 @@ PDFs automatically include the bundled Buy Me a Coffee QR in a collision-safe
 bottom-right decoration area. It never changes strip placement and never
 appears in calibration PDFs.
 
-CSV, accounts, printer correction factors, analytics, cloud save, nested headers, and arbitrary uploaded fonts are intentionally not implemented.
+CSV, accounts, printer correction factors, cloud save, nested headers, and arbitrary uploaded fonts are intentionally not implemented.
