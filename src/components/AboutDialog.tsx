@@ -81,6 +81,32 @@ export function AboutDialog({
           <article>
             <h4>v{APP_VERSION}</h4>
             <ul>
+              <li>Undo and redo with Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z</li>
+              <li>
+                A warning before unsaved changes are lost, and a marker on
+                Save while there are any
+              </li>
+              <li>
+                Changing the cell count no longer deletes text while you type;
+                reducing it asks first
+              </li>
+              <li>
+                PDF text keeps letters such as g, j, p, y and Å, Ø fully
+                inside the label
+              </li>
+              <li>Separate Cut lines and Crop marks options</li>
+              <li>
+                Keyboard editing: Tab to a strip, arrow keys between cells,
+                Enter to edit, Escape to close dialogs
+              </li>
+              <li>Accented text pasted from other documents prints correctly</li>
+              <li>Faster typing in projects with many strips</li>
+              <li>An Example button that loads a filled-in rack project</li>
+            </ul>
+          </article>
+          <article>
+            <h4>v1.0.2</h4>
+            <ul>
               <li>Press Enter in a cell to start line 2</li>
               <li>Type immediately after the first click on a cell</li>
               <li>

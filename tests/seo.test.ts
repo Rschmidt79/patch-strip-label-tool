@@ -101,7 +101,7 @@ describe('public search metadata', () => {
   })
 
   it('retains the final release version and no visible beta badge', () => {
-    expect(packageMetadata.version).toBe('1.0.2')
+    expect(packageMetadata.version).toBe('1.1.0')
     expect(readProjectFile('src/components/Toolbar.tsx')).not.toContain(
       'beta-badge',
     )
