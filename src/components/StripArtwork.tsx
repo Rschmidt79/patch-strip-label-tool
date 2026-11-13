@@ -1,6 +1,9 @@
 import {
   fitFontSizePt,
   getCellWidthMm,
+  getPreviewLineFontSizesPt,
+  PREVIEW_FONT_FAMILY,
+  PREVIEW_LINE_HEIGHT_RATIO,
   getStripRowTopOffsetsMm,
   getStripTotalHeightMm,
   getStripWidthMm,
@@ -33,9 +36,8 @@ function SvgCellText({
   cellHeightMm,
 }: SvgCellTextProps) {
   const horizontalPaddingMm = Math.min(1.25, cellWidthMm * 0.08)
-  const availableWidthMm = Math.max(0.5, cellWidthMm - horizontalPaddingMm * 2)
   const lines = [cell.line1, cell.line2].filter(Boolean)
-  const { alignment, fontSizePt, fontWeight, autoFit } = cell.style
+  const { alignment, fontWeight } = cell.style
   const anchor =
     alignment === 'left' ? 'start' : alignment === 'right' ? 'end' : 'middle'
   const textX =
@@ -47,23 +49,14 @@ function SvgCellText({
 
   if (lines.length === 0) return null
 
-  const maximumLineSizePt =
-    cellHeightMm /
-    (lines.length === 1 ? 1.15 : lines.length * 1.12) /
-    MM_PER_POINT
-  const requestedSizePt = autoFit
-    ? Math.min(fontSizePt, maximumLineSizePt)
-    : fontSizePt
-  const fittedSizesPt = lines.map((line) =>
-    fitFontSizePt(
-      line,
-      availableWidthMm,
-      requestedSizePt,
-      fontWeight,
-      autoFit,
-    ),
+  const fittedSizesPt = getPreviewLineFontSizesPt(
+    lines,
+    cellWidthMm,
+    cellHeightMm,
+    cell.style,
   )
-  const lineHeightMm = Math.max(...fittedSizesPt) * MM_PER_POINT * 1.04
+  const lineHeightMm =
+    Math.max(...fittedSizesPt) * MM_PER_POINT * PREVIEW_LINE_HEIGHT_RATIO
   const firstBaseline =
     cellY +
     (lines.length === 1
@@ -81,7 +74,7 @@ function SvgCellText({
             y={firstBaseline + index * lineHeightMm}
             textAnchor={anchor}
             dominantBaseline="middle"
-            fontFamily="Inter, Segoe UI, sans-serif"
+            fontFamily={PREVIEW_FONT_FAMILY}
             fontSize={fittedSizePt * MM_PER_POINT}
             fontWeight={fontWeight === 'bold' ? 700 : 400}
             fill={cell.appearance.textColor}
