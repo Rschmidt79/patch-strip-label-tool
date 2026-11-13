@@ -49,6 +49,52 @@ export function resizeStripCells(
   }
 }
 
+export interface CellResizeLoss {
+  /** Removed cells that contain text. */
+  cellsWithText: number
+  /** Group headers that would be removed or shortened. */
+  affectedGroupHeaders: number
+}
+
+/** Describes what `resizeStripCells` would discard, without changing anything. */
+export function getCellResizeLoss(
+  row: LabelStripRow,
+  nextCount: number,
+): CellResizeLoss {
+  const cellCount = Math.max(1, Math.min(64, Math.round(nextCount)))
+  return {
+    cellsWithText: row.cells
+      .slice(cellCount)
+      .filter((cell) => cell.line1 !== '' || cell.line2 !== '').length,
+    affectedGroupHeaders: row.groupHeaders.filter(
+      (header) => header.endCellIndex >= cellCount,
+    ).length,
+  }
+}
+
+export function getCellResizeConfirmationMessage(
+  nextCount: number,
+  loss: CellResizeLoss,
+): string | undefined {
+  const parts: string[] = []
+  if (loss.cellsWithText > 0) {
+    parts.push(
+      loss.cellsWithText === 1
+        ? '1 cell with text will be removed'
+        : `${loss.cellsWithText} cells with text will be removed`,
+    )
+  }
+  if (loss.affectedGroupHeaders > 0) {
+    parts.push(
+      loss.affectedGroupHeaders === 1
+        ? '1 group header will be removed or shortened'
+        : `${loss.affectedGroupHeaders} group headers will be removed or shortened`,
+    )
+  }
+  if (parts.length === 0) return undefined
+  return `Reduce this row to ${nextCount} ${nextCount === 1 ? 'cell' : 'cells'}? ${parts.join(' and ')}.`
+}
+
 export function duplicateStrip(strip: LabelStrip, name: string): LabelStrip {
   return {
     ...strip,
@@ -88,6 +134,7 @@ export function updateStripRow(
   const currentRow = strip.rows.find((row) => row.id === rowId)
   if (!currentRow) return strip
   const updatedRow = updater(currentRow)
+  if (updatedRow === currentRow) return strip
   const widthMm = updatedRow.dimensions.widthMm
   return {
     ...strip,

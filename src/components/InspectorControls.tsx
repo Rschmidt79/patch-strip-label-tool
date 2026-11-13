@@ -12,7 +12,13 @@ interface NumberFieldProps {
   step: number
   unit?: string
   contextKey?: string
-  onChange: (value: number) => void
+  /**
+   * Apply the value only on blur or Enter, never while typing. Use this for
+   * destructive values where an intermediate keystroke must not take effect.
+   */
+  commitOnBlur?: boolean
+  /** Return false to reject the value; the field then shows the old value. */
+  onChange: (value: number) => boolean | void
 }
 
 export function NumberField({
@@ -23,6 +29,7 @@ export function NumberField({
   step,
   unit,
   contextKey,
+  commitOnBlur = false,
   onChange,
 }: NumberFieldProps) {
   const formattedValue = String(Number(value.toFixed(3)))
@@ -31,8 +38,27 @@ export function NumberField({
   const focusedContextKeyRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
-    if (document.activeElement !== inputRef.current) setDraft(formattedValue)
+    // Keep a focused draft while it still describes the stored value (for
+    // example "4." while typing "4.5"), but follow outside changes such as
+    // undo, presets, or another row becoming active.
+    setDraft((current) =>
+      document.activeElement === inputRef.current &&
+      current !== '' &&
+      Number(current) === Number(formattedValue)
+        ? current
+        : formattedValue,
+    )
   }, [formattedValue])
+
+  function commitDraft() {
+    const parsedValue = Number(draft)
+    const nextValue =
+      draft !== '' && Number.isFinite(parsedValue)
+        ? Math.min(max, Math.max(min, parsedValue))
+        : value
+    const accepted = nextValue === value || onChange(nextValue) !== false
+    setDraft(accepted ? String(Number(nextValue.toFixed(3))) : formattedValue)
+  }
 
   return (
     <label className="field">
@@ -50,6 +76,7 @@ export function NumberField({
           }}
           onChange={(event) => {
             setDraft(event.target.value)
+            if (commitOnBlur) return
             const nextValue = Number(event.target.value)
             if (
               event.target.value !== '' &&
@@ -58,6 +85,12 @@ export function NumberField({
               nextValue <= max
             ) {
               onChange(nextValue)
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitDraft()
             }
           }}
           onBlur={() => {
@@ -70,12 +103,7 @@ export function NumberField({
               setDraft(formattedValue)
               return
             }
-            const parsedValue = Number(draft)
-            const nextValue = Number.isFinite(parsedValue)
-              ? Math.min(max, Math.max(min, parsedValue))
-              : value
-            setDraft(String(Number(nextValue.toFixed(3))))
-            onChange(nextValue)
+            commitDraft()
           }}
         />
         {unit && <em>{unit}</em>}

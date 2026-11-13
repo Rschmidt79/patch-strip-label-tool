@@ -83,6 +83,7 @@ function HeaderTextField({
         <input
           value={draft}
           maxLength={MAX_LABEL_TEXT_LENGTH}
+          data-native-undo
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && draft.trim()) {

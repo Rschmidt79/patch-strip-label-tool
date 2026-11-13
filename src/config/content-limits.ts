@@ -6,6 +6,8 @@ export const MAX_PROJECT_STRIPS = 128
 export const MAX_ROWS_PER_STRIP = 16
 export const MAX_PROJECT_ROWS = 256
 export const MAX_CELLS_PER_STRIP = 256
+/** Widest strip a project file accepts; the editor must not exceed it. */
+export const MAX_STRIP_WIDTH_MM = 5000
 export const MAX_NAME_LENGTH = 160
 export const MAX_CELL_TEXT_LENGTH = 2_000
 export const MAX_LABEL_TEXT_LENGTH = 500

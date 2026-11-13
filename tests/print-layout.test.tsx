@@ -11,7 +11,11 @@ import { describe, expect, it } from 'vitest'
 import { PageLayoutPreview } from '../src/components/PageLayoutPreview'
 import { millimetersToPoints } from '../src/lib/dimensions'
 import { createLabelsPdf } from '../src/lib/pdf-export'
-import { planPrintLayout } from '../src/lib/print-layout'
+import {
+  getPrintLayoutGeometryKey,
+  planPrintLayout,
+  planPrintLayoutFromGeometryKey,
+} from '../src/lib/print-layout'
 import {
   CROP_MARK_WIDTH_MM,
   CROP_MARK_LENGTH_MM,
@@ -90,28 +94,60 @@ describe('shared print layout plan', () => {
     }
   })
 
-  it('exposes crop-mark geometry as the single user-facing Cut lines toggle', () => {
+  it('offers separate Cut lines and Crop marks toggles bound to their own preference', () => {
     const project = createProject()
-    const preferences = {
-      ...DEFAULT_PRINT_PREFERENCES,
-      cutLines: false,
-      cropMarks: true,
+    const render = (cutLines: boolean, cropMarks: boolean) => {
+      const preferences = { ...DEFAULT_PRINT_PREFERENCES, cutLines, cropMarks }
+      return renderToStaticMarkup(
+        <PageLayoutPreview
+          project={project}
+          preferences={preferences}
+          plan={planPrintLayout(project, preferences)}
+          error={undefined}
+          onPreferencesChange={() => undefined}
+        />,
+      )
     }
-    const markup = renderToStaticMarkup(
-      <PageLayoutPreview
-        project={project}
-        preferences={preferences}
-        plan={planPrintLayout(project, preferences)}
-        error={undefined}
-        onPreferencesChange={() => undefined}
-      />,
-    )
 
-    expect(markup.match(/>Cut lines</g)).toHaveLength(1)
-    expect(markup).not.toContain('Crop marks')
-    expect(markup).toContain(
+    const cutOnly = render(true, false)
+    expect(cutOnly).toContain(
       '<input type="checkbox" checked=""/><span>Cut lines</span>',
     )
+    expect(cutOnly).toContain('<input type="checkbox"/><span>Crop marks</span>')
+    expect(cutOnly).toContain('page-preview-cut-line')
+    expect(cutOnly).not.toContain('page-preview-crop-mark')
+
+    const cropOnly = render(false, true)
+    expect(cropOnly).toContain('<input type="checkbox"/><span>Cut lines</span>')
+    expect(cropOnly).toContain(
+      '<input type="checkbox" checked=""/><span>Crop marks</span>',
+    )
+    expect(cropOnly).not.toContain('page-preview-cut-line')
+    expect(cropOnly).toContain('page-preview-crop-mark')
+  })
+
+  it('plans the identical layout from the geometry key and ignores label text', () => {
+    const project = createProject()
+    project.strips = [
+      createStrip('Long', 432, 7.5, 12),
+      createStrip('Short', 216, 7.5, 8, 2),
+    ]
+    const key = getPrintLayoutGeometryKey(project)
+    const fromKey = planPrintLayoutFromGeometryKey(
+      key,
+      DEFAULT_PRINT_PREFERENCES,
+    )
+    expect(fromKey).toEqual(planPrintLayout(project, DEFAULT_PRINT_PREFERENCES))
+
+    const edited = structuredClone(project)
+    edited.updatedAt = '2030-01-01T00:00:00.000Z'
+    edited.strips[0].rows[0].cells[0].line1 = 'CAM 1'
+    edited.strips[0].rows[0].cells[0].appearance.backgroundColor = '#ff0000'
+    expect(getPrintLayoutGeometryKey(edited)).toBe(key)
+
+    const resized = structuredClone(project)
+    resized.strips[0].rows[0].dimensions.heightMm = 9
+    expect(getPrintLayoutGeometryKey(resized)).not.toBe(key)
   })
 
   it('keeps the 432 mm SRA3 strip horizontal with crop marks inside the page', () => {

@@ -85,11 +85,50 @@ function CellTextareaEditor({
         }
         if (event.key === 'Escape') {
           event.preventDefault()
+          // Keep keyboard focus on the cell so arrow keys and Enter still work.
+          const cellElement = event.currentTarget.closest('.svg-cell')
+          if (cellElement instanceof SVGElement) cellElement.focus()
           onClearSelection()
         }
       }}
     />
   )
+}
+
+/**
+ * Moves keyboard focus to a neighbouring cell: left/right within the row,
+ * up/down to the same position in the adjacent row of the strip.
+ */
+function focusNeighbourCell(cellElement: Element, key: string): boolean {
+  const rowElement = cellElement.closest('.svg-strip-row')
+  if (!rowElement) return false
+  const cellsInRow = Array.from(
+    rowElement.querySelectorAll<SVGElement>(':scope > .svg-cell'),
+  )
+  const index = cellsInRow.findIndex((candidate) => candidate === cellElement)
+  let target: SVGElement | undefined
+
+  if (key === 'ArrowLeft') target = cellsInRow[index - 1]
+  else if (key === 'ArrowRight') target = cellsInRow[index + 1]
+  else if (key === 'Home') target = cellsInRow[0]
+  else if (key === 'End') target = cellsInRow[cellsInRow.length - 1]
+  else if (key === 'ArrowUp' || key === 'ArrowDown') {
+    const rows = Array.from(
+      rowElement.parentElement?.querySelectorAll(':scope > .svg-strip-row') ??
+        [],
+    )
+    const adjacentRow =
+      rows[rows.indexOf(rowElement) + (key === 'ArrowUp' ? -1 : 1)]
+    const adjacentCells = Array.from(
+      adjacentRow?.querySelectorAll<SVGElement>(':scope > .svg-cell') ?? [],
+    )
+    target = adjacentCells[Math.min(index, adjacentCells.length - 1)]
+  } else {
+    return false
+  }
+
+  target?.focus()
+  return true
 }
 
 export function StripSvgEditor({
@@ -112,6 +151,14 @@ export function StripSvgEditor({
   const activeRow =
     strip.rows.find((row) => row.id === activeRowId) ?? strip.rows[0]
   const rowTopOffsetsMm = getStripRowTopOffsetsMm(strip)
+  // With no selection in this strip, its first cell is the keyboard entry
+  // point; otherwise the selected cells are.
+  const hasSelectedCell =
+    activeRow?.cells.some((cell) => selectedCellIds.includes(cell.id)) ??
+    false
+  const keyboardEntryCellId = hasSelectedCell
+    ? undefined
+    : strip.rows[0]?.cells[0]?.id
   const rowsWithOffsets = strip.rows.map((row, index) => ({
     row,
     topMm: rowTopOffsetsMm[index],
@@ -214,8 +261,10 @@ export function StripSvgEditor({
                     key={cell.id}
                     className={`svg-cell ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
                     role="button"
-                    tabIndex={isSelected ? 0 : -1}
-                    aria-selected={isSelected}
+                    tabIndex={
+                      isSelected || cell.id === keyboardEntryCellId ? 0 : -1
+                    }
+                    aria-pressed={isSelected}
                     aria-label={`Row ${rowIndex + 1}, cell ${index + 1}: ${cell.line1} ${cell.line2}`}
                     onPointerDown={(event) => {
                       if (
@@ -232,6 +281,10 @@ export function StripSvgEditor({
                     }}
                     onKeyDown={(event) => {
                       if (event.target !== event.currentTarget) return
+                      if (focusNeighbourCell(event.currentTarget, event.key)) {
+                        event.preventDefault()
+                        return
+                      }
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
                         onSelectCell(row.id, cell.id, event.shiftKey)

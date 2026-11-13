@@ -6,6 +6,7 @@ import {
   SUPPORT_URL,
 } from '../config/app-info'
 import { APP_NAME } from '../config/branding'
+import { Modal } from './Modal'
 
 interface AboutDialogProps {
   installPromptAvailable: boolean
@@ -19,19 +20,11 @@ export function AboutDialog({
   onClose,
 }: AboutDialogProps) {
   return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+    <Modal
+      className="about-dialog"
+      labelledBy="about-dialog-title"
+      onClose={onClose}
     >
-      <section
-        className="about-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="about-dialog-title"
-      >
         <div className="about-heading">
           <div>
             <span className="eyebrow">Help / About</span>
@@ -165,7 +158,6 @@ export function AboutDialog({
         <footer className="about-version">
           v{APP_VERSION} · Build {BUILD_DATE}
         </footer>
-      </section>
-    </div>
+    </Modal>
   )
 }

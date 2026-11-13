@@ -50,8 +50,13 @@ Constants for conversion live in `src/lib/dimensions.ts`. Reuse them instead of 
 - `src/lib/print-layout.ts`: shared composition of packing placements and page cut-guide geometry for preview and PDF.
 - `src/lib/cut-guides.ts`: pure coincident-edge, deduplicated cut-line, shared-edge, and crop-mark geometry in millimeters.
 - `src/lib/pdf-export.ts`: dynamically loaded client-side vector PDF and calibration generation.
+- `src/lib/pdf-text.ts`: WinAnsi encoding checks, Unicode normalization, and readable substitutions for PDF text.
+- `src/lib/pdf-text-layout.ts`: pure vertical placement of PDF text lines so descenders and accented capitals stay inside the cell.
+- `src/lib/project-history.ts`: pure undo/redo snapshot history, edit coalescing, and unsaved-change tracking.
 - `src/lib/download.ts`: browser Blob download, dated PDF filename, and print-tab helpers.
 - `src/components/Toolbar.tsx`: project identity and top-level actions.
+- `src/components/Modal.tsx`: shared modal shell with Escape-to-close, focus trap, and focus return.
+- `src/components/AppErrorBoundary.tsx`: top-level fallback shown if rendering fails.
 - `src/components/Sidebar.tsx`: page, strip, and selected-cell controls.
 - `src/components/Workspace.tsx`: strip collection and editor-level controls.
 - `src/components/PageLayoutPreview.tsx`: SVG page preview driven by the shared PDF layout plan.
@@ -81,10 +86,12 @@ Keep geometry/domain functions pure where practical. Keep components focused on 
 - Preserve keyboard-first editing. Tab and Shift+Tab must continue to move between cells.
 - Preserve the distinction between selection and editing: a normal cell click selects and edits one cell; Shift-click extends a contiguous range without opening an editor. Bulk operations must never affect cells outside the resolved range.
 - Keep uncommon settings under an Advanced disclosure.
+- Every project change goes through `updateProject` in `src/App.tsx` so it becomes an undo step. Pass a coalesce key for continuous edits such as typing. Destructive values (for example the cell count) commit on blur or Enter and ask for confirmation before discarding content.
 - Add dependencies only when they clearly reduce risk or complexity. Keep `pdf-lib` as the PDF primitive layer unless a reviewed replacement materially improves precise browser-side vector output.
 - Keep the production artifact deployable as static files. Never add API routes, server functions, server rendering, database clients, or a required local companion application.
 - Keep the PDF exporter dynamically loaded so PDF code does not increase initial editor startup cost.
 - Maintain accessible labels, focus states, and button semantics.
+- Cells are keyboard reachable: each strip exposes one Tab stop, arrow keys move between cells, Enter edits, and Escape returns focus to the cell. New dialogs use `Modal`.
 
 ## PDF implementation
 
@@ -102,4 +109,4 @@ The application is intended to be hosted as a static website. `npm run build` mu
 
 Milestones 1 through 3 are implemented: Vite/React/TypeScript foundation, typed editor model, direct SVG editing, strip management, text styling/auto-fit, presets, millimeter geometry, range-aware auto numbering and clearing, versioned JSON save/open with migrations, A4/A3 deterministic unscaled packing, automatic diagonal rotation, shared page preview, direct PDF print-tab workflow, clear non-fit reporting, calibration PDF, and automated dimensional/domain tests.
 
-Intentionally still pending: CSV import/export, mathematically optimal packing, printer correction factors, robust dirty-state tracking, custom font embedding, broader Unicode handling, and additional migration versions.
+Intentionally still pending: CSV import/export, mathematically optimal packing, printer correction factors, custom font embedding, broader Unicode handling, and additional migration versions.

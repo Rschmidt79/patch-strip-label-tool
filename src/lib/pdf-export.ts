@@ -28,6 +28,10 @@ import {
 import { hexToRgb } from './colors'
 import { toPdfText } from './pdf-text'
 import {
+  layoutPdfTextLines,
+  type PdfFontVerticalMetrics,
+} from './pdf-text-layout'
+import {
   getCellContentGeometryMm,
   getGroupHeaderGeometryMm,
 } from './group-headers'
@@ -270,12 +274,11 @@ function fitPdfFontSize(
   )
 }
 
-interface FittedPdfLine {
-  text: string
-  font: PDFFont
-  sizePt: number
-  widthPt: number
-  heightPt: number
+function getFontVerticalMetrics(font: PDFFont): PdfFontVerticalMetrics {
+  return {
+    boxHeightRatio: font.heightAtSize(1),
+    capHeightRatio: font.heightAtSize(1, { descender: false }),
+  }
 }
 
 function drawCellText(
@@ -298,32 +301,29 @@ function drawCellText(
   )
   const maximumLineHeightPt =
     cellHeightPt / (textLines.length === 1 ? 1.15 : textLines.length * 1.12)
-  const lines = textLines.map<FittedPdfLine>((text) => {
-    const sizePt = fitPdfFontSize(
+  const fittedSizesPt = textLines.map((text) =>
+    fitPdfFontSize(
       text,
       font,
       cell.style.fontSizePt,
       maximumWidthPt,
       maximumLineHeightPt,
       cell.style.autoFit,
-    )
-    return {
-      text,
-      font,
-      sizePt,
-      widthPt: font.widthOfTextAtSize(text, sizePt),
-      heightPt: font.heightAtSize(sizePt),
-    }
+    ),
+  )
+  const placements = layoutPdfTextLines({
+    sizesPt: fittedSizesPt,
+    metrics: getFontVerticalMetrics(font),
+    cellBottomPt: cellYPt,
+    cellHeightPt,
+    lineGapPt: textLines.length > 1 ? 0.45 : 0,
+    allowShrink: cell.style.autoFit,
   })
+  const textColor = hexToRgb(cell.appearance.textColor)
 
-  const lineGapPt = lines.length > 1 ? 0.45 : 0
-  const blockHeightPt =
-    lines.reduce((total, line) => total + line.heightPt, 0) +
-    lineGapPt * (lines.length - 1)
-  let lineTopPt = cellYPt + (cellHeightPt + blockHeightPt) / 2
-
-  for (const line of lines) {
-    lineTopPt -= line.heightPt
+  textLines.forEach((text, index) => {
+    const { sizePt, baselinePt } = placements[index]
+    const lineWidthPt = font.widthOfTextAtSize(text, sizePt)
     const xPt =
       cell.style.alignment === 'left'
         ? cellXPt + millimetersToPoints(LABEL_HORIZONTAL_PADDING_MM)
@@ -331,19 +331,17 @@ function drawCellText(
           ? cellXPt +
             cellWidthPt -
             millimetersToPoints(LABEL_HORIZONTAL_PADDING_MM) -
-            line.widthPt
-          : cellXPt + (cellWidthPt - line.widthPt) / 2
+            lineWidthPt
+          : cellXPt + (cellWidthPt - lineWidthPt) / 2
 
-    const textColor = hexToRgb(cell.appearance.textColor)
-    page.drawText(line.text, {
+    page.drawText(text, {
       x: xPt,
-      y: lineTopPt,
-      size: line.sizePt,
-      font: line.font,
+      y: baselinePt,
+      size: sizePt,
+      font,
       color: rgb(textColor.red, textColor.green, textColor.blue),
     })
-    lineTopPt -= lineGapPt
-  }
+  })
 }
 
 function drawGroupHeaderText(
@@ -372,7 +370,7 @@ function drawGroupHeaderText(
     true,
   )
   const textWidthPt = font.widthOfTextAtSize(text, sizePt)
-  const textHeightPt = font.heightAtSize(sizePt)
+  const capHeightPt = font.heightAtSize(sizePt, { descender: false })
   const textXPt =
     header.style.alignment === 'left'
       ? xPt + millimetersToPoints(LABEL_HORIZONTAL_PADDING_MM)
@@ -386,7 +384,8 @@ function drawGroupHeaderText(
 
   page.drawText(text, {
     x: textXPt,
-    y: yPt + (heightPt - textHeightPt) / 2,
+    // Capital letters are centered in the band; descenders stay inside it.
+    y: yPt + (heightPt - capHeightPt) / 2,
     size: sizePt,
     font,
     color: rgb(textColor.red, textColor.green, textColor.blue),
