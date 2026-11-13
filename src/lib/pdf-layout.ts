@@ -10,7 +10,11 @@ import type {
   PageSettings,
 } from '../model/project'
 import { getTotalSharedEdgeLengthMm } from './cut-guides'
-import { getStripTotalHeightMm, getStripWidthMm } from './dimensions'
+import {
+  formatMillimeters,
+  getStripTotalHeightMm,
+  getStripWidthMm,
+} from './dimensions'
 import {
   degreesToRadians,
   findMinimumRotationToFitMm,
@@ -141,7 +145,7 @@ export class PdfPlacementError extends Error {
     const details = failures
       .map(
         (failure) =>
-          `“${failure.stripName}” (${failure.stripWidthMm} × ${failure.stripHeightMm} mm; usable area ${failure.availableWidthMm} × ${failure.availableHeightMm} mm)`,
+          `“${failure.stripName}” (${formatMillimeters(failure.stripWidthMm)} × ${formatMillimeters(failure.stripHeightMm)} mm; usable area ${formatMillimeters(failure.availableWidthMm)} × ${formatMillimeters(failure.availableHeightMm)} mm)`,
       )
       .join(', ')
     super(

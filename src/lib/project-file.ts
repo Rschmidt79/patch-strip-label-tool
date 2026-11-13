@@ -28,6 +28,7 @@ import {
   MAX_PROJECT_ROWS,
   MAX_PROJECT_STRIPS,
   MAX_ROWS_PER_STRIP,
+  MAX_STRIP_WIDTH_MM,
   MAX_TIMESTAMP_LENGTH,
 } from '../config/content-limits'
 import {
@@ -279,7 +280,12 @@ function parseCell(
 function parseDimensions(value: unknown, path: string): StripDimensions {
   const dimensions = expectRecord(value, path)
   const parsed: StripDimensions = {
-    widthMm: expectNumber(dimensions.widthMm, `${path}.widthMm`, 0.1, 5000),
+    widthMm: expectNumber(
+      dimensions.widthMm,
+      `${path}.widthMm`,
+      0.1,
+      MAX_STRIP_WIDTH_MM,
+    ),
     heightMm: expectNumber(
       dimensions.heightMm,
       `${path}.heightMm`,

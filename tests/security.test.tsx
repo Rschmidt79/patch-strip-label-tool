@@ -111,6 +111,11 @@ describe('untrusted project content', () => {
         onNewProject={() => undefined}
         onOpenProject={() => undefined}
         onSaveProject={() => undefined}
+        onUndo={() => undefined}
+        onRedo={() => undefined}
+        canUndo={false}
+        canRedo={false}
+        hasUnsavedChanges={false}
         onPrintPdf={() => undefined}
         onExportPdf={() => undefined}
         onExportCalibration={() => undefined}

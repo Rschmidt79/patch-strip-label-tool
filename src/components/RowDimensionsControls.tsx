@@ -1,11 +1,16 @@
 import { useState } from 'react'
+import { MAX_STRIP_WIDTH_MM } from '../config/content-limits'
 import { STRIP_PRESETS } from '../config/presets'
 import {
   formatMillimeters,
   getCellWidthMm,
   getStripTotalHeightMm,
 } from '../lib/dimensions'
-import { resizeStripCells } from '../lib/strip'
+import {
+  getCellResizeConfirmationMessage,
+  getCellResizeLoss,
+  resizeStripCells,
+} from '../lib/strip'
 import type { LabelStrip, LabelStripRow } from '../model/project'
 import { NumberField } from './InspectorControls'
 
@@ -40,6 +45,15 @@ export function RowDimensionsControls({
 
   const update = (updater: (row: LabelStripRow) => LabelStripRow) =>
     onUpdateRow(activeRow.id, updater)
+
+  /** Asks before a smaller cell count discards text or group headers. */
+  const confirmCellCount = (cellCount: number): boolean => {
+    const message = getCellResizeConfirmationMessage(
+      cellCount,
+      getCellResizeLoss(activeRow, cellCount),
+    )
+    return message === undefined || window.confirm(message)
+  }
 
   return (
     <section
@@ -96,6 +110,7 @@ export function RowDimensionsControls({
                 preset.heightMm === undefined ||
                 preset.cellCount === undefined
               ) return
+              if (!confirmCellCount(preset.cellCount)) return
 
               update((row) => {
                 const resized = resizeStripCells(row, preset.cellCount!)
@@ -191,11 +206,27 @@ export function RowDimensionsControls({
               value={activeRow.dimensions.cellCount}
               contextKey={activeRow.id}
               min={1}
-              max={64}
-              step={1}
-              onChange={(cellCount) =>
-                update((row) => resizeStripCells(row, Math.trunc(cellCount)))
+              max={
+                activeRow.dimensions.cellWidthMode === 'custom'
+                  ? Math.max(
+                      1,
+                      Math.min(
+                        64,
+                        Math.floor(
+                          MAX_STRIP_WIDTH_MM /
+                            activeRow.dimensions.customCellWidthMm,
+                        ),
+                      ),
+                    )
+                  : 64
               }
+              step={1}
+              commitOnBlur
+              onChange={(value) => {
+                const cellCount = Math.trunc(value)
+                if (!confirmCellCount(cellCount)) return false
+                update((row) => resizeStripCells(row, cellCount))
+              }}
             />
             <label className="field readonly-field">
               <span>Cell width</span>
@@ -247,7 +278,10 @@ export function RowDimensionsControls({
                   value={activeRow.dimensions.customCellWidthMm}
                   contextKey={activeRow.id}
                   min={1}
-                  max={250}
+                  max={Math.min(
+                    250,
+                    MAX_STRIP_WIDTH_MM / activeRow.dimensions.cellCount,
+                  )}
                   step={0.1}
                   unit="mm"
                   onChange={(customCellWidthMm) =>

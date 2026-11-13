@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AppFooter } from './components/AppFooter'
 import { MobileScreenNotice } from './components/MobileScreenNotice'
+import { Modal } from './components/Modal'
 import { Sidebar } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
 import { Workspace } from './components/Workspace'
@@ -38,7 +39,22 @@ import {
   downloadText,
   openPdfBytesInWindow,
 } from './lib/download'
-import { planPrintLayout, type PrintLayoutPlan } from './lib/print-layout'
+import {
+  getPrintLayoutGeometryKey,
+  planPrintLayoutFromGeometryKey,
+  type PrintLayoutPlan,
+} from './lib/print-layout'
+import {
+  canRedoProjectChange,
+  canUndoProjectChange,
+  commitProjectChange,
+  createProjectHistory,
+  hasUnsavedProjectChanges,
+  markProjectSaved,
+  redoProjectChange,
+  undoProjectChange,
+  type ProjectHistory,
+} from './lib/project-history'
 import { findPdfUnsupportedCharacters } from './lib/pdf-text'
 import {
   ProjectFileError,
@@ -110,7 +126,12 @@ function getBrowserStorage(): StorageLike | undefined {
 }
 
 export function App() {
-  const [project, setProject] = useState<LabelProject>(createProject)
+  const [history, setHistory] = useState<ProjectHistory>(() =>
+    createProjectHistory(createProject()),
+  )
+  const project = history.present
+  const hasUnsavedChanges = hasUnsavedProjectChanges(history)
+  const hasUnsavedChangesRef = useRef(hasUnsavedChanges)
   const [storedPrintPreferences] = useState(() =>
     readStoredPrintPreferences(getBrowserStorage()),
   )
@@ -150,6 +171,19 @@ export function App() {
   }, [printPreferences])
 
   useEffect(() => listenForAppInstallPrompt(window, setInstallPrompt), [])
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges
+    if (!hasUnsavedChanges) return
+    // Ask the browser to confirm before a reload, close, or navigation
+    // discards edits that only exist in memory.
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
 
   const activeStrip = useMemo(
     () => project.strips.find((strip) => strip.id === activeStripId),
@@ -209,10 +243,19 @@ export function App() {
       project.strips.find((strip) => strip.id === pendingDeleteStripId),
     [pendingDeleteStripId, project.strips],
   )
+  // The layout depends on strip geometry only, so it is keyed on that rather
+  // than on the whole project: typing label text must not re-run the packer.
+  const layoutGeometryKey = getPrintLayoutGeometryKey(project)
+  const hasStrips = project.strips.length > 0
   const pageLayout = useMemo<PageLayoutResult>(() => {
-    if (project.strips.length === 0) return {}
+    if (!hasStrips) return {}
     try {
-      return { plan: planPrintLayout(project, printPreferences) }
+      return {
+        plan: planPrintLayoutFromGeometryKey(
+          layoutGeometryKey,
+          printPreferences,
+        ),
+      }
     } catch (error) {
       return {
         error:
@@ -221,7 +264,7 @@ export function App() {
             : 'The page layout could not be calculated.',
       }
     }
-  }, [printPreferences, project])
+  }, [hasStrips, layoutGeometryKey, printPreferences])
   const feedbackHref = useMemo(
     () =>
       createFeedbackMailto({
@@ -237,32 +280,110 @@ export function App() {
     setPrintPreferences(preferences)
   }
 
-  function updateProject(updater: (current: LabelProject) => LabelProject) {
-    setProject((current) => ({
-      ...updater(current),
-      updatedAt: new Date().toISOString(),
-    }))
+  /**
+   * Applies a project change as one undo step. Changes that share a
+   * `coalesceKey` and follow each other closely (typing in one cell, dragging
+   * a color picker) are folded into a single step.
+   */
+  function updateProject(
+    updater: (current: LabelProject) => LabelProject,
+    coalesceKey?: string,
+  ) {
+    const timestampMs = Date.now()
+    setHistory((current) => {
+      const updated = updater(current.present)
+      if (updated === current.present) return current
+      return commitProjectChange(
+        current,
+        { ...updated, updatedAt: new Date(timestampMs).toISOString() },
+        { coalesceKey, timestampMs },
+      )
+    })
   }
 
   function updateStrip(
     stripId: string,
     updater: (strip: LabelStrip) => LabelStrip,
+    coalesceKey?: string,
   ) {
-    updateProject((current) => ({
-      ...current,
-      strips: current.strips.map((strip) =>
-        strip.id === stripId ? updater(strip) : strip,
-      ),
-    }))
+    updateProject((current) => {
+      let changed = false
+      const strips = current.strips.map((strip) => {
+        if (strip.id !== stripId) return strip
+        const updated = updater(strip)
+        if (updated !== strip) changed = true
+        return updated
+      })
+      return changed ? { ...current, strips } : current
+    }, coalesceKey)
   }
 
   function updateRow(
     stripId: string,
     rowId: string,
     updater: (row: LabelStripRow) => LabelStripRow,
+    coalesceKey?: string,
   ) {
-    updateStrip(stripId, (strip) => updateStripRow(strip, rowId, updater))
+    updateStrip(
+      stripId,
+      (strip) => updateStripRow(strip, rowId, updater),
+      coalesceKey,
+    )
   }
+
+  /** Shows an undone or redone snapshot and repairs editor state around it. */
+  function showHistory(next: ProjectHistory) {
+    if (next === history) return
+    const strips = next.present.strips
+    const nextActiveStrip =
+      strips.find((strip) => strip.id === activeStripId) ?? strips[0]
+    const nextActiveRow =
+      nextActiveStrip?.rows.find((row) => row.id === activeRowId) ??
+      nextActiveStrip?.rows[0]
+
+    setHistory(next)
+    setActiveStripId(nextActiveStrip?.id)
+    setActiveRowId(nextActiveRow?.id)
+    setSelectedJoinStripIds((current) =>
+      current.filter((stripId) =>
+        strips.some((strip) => strip.id === stripId),
+      ),
+    )
+    setPendingDeleteStripId(undefined)
+    if (selection && !isEditorSelectionValid(strips, selection)) {
+      clearSelection()
+    }
+  }
+
+  function handleUndo() {
+    showHistory(undoProjectChange(history))
+  }
+
+  function handleRedo() {
+    showHistory(redoProjectChange(history))
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return
+      const key = event.key.toLowerCase()
+      const isUndo = key === 'z' && !event.shiftKey
+      const isRedo = (key === 'z' && event.shiftKey) || key === 'y'
+      if (!isUndo && !isRedo) return
+      // Fields that are not part of the project keep the browser's own undo.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-native-undo]')
+      ) {
+        return
+      }
+      event.preventDefault()
+      if (isUndo) handleUndo()
+      else handleRedo()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
 
   function updateRowFromStripSetup(
     stripId: string,
@@ -276,7 +397,16 @@ export function App() {
       strip.id === stripId ? updatedStrip : strip,
     )
 
-    updateStrip(stripId, () => updatedStrip)
+    // A changed cell count can discard content, so it is always its own
+    // undo step; continuous dimension typing is folded into one.
+    const cellCountChanged =
+      source.rows.find((row) => row.id === rowId)?.cells.length !==
+      updatedStrip.rows.find((row) => row.id === rowId)?.cells.length
+    updateStrip(
+      stripId,
+      () => updatedStrip,
+      cellCountChanged ? undefined : `row-setup:${rowId}`,
+    )
     if (selection && !isEditorSelectionValid(nextStrips, selection)) {
       clearSelection()
     }
@@ -285,12 +415,17 @@ export function App() {
   function updateSelectedCell(updater: (cell: LabelCell) => LabelCell) {
     if (!resolvedSelection || resolvedSelection.cellIds.length !== 1) return
     const selectedCellId = resolvedSelection.cellIds[0]
-    updateRow(resolvedSelection.stripId, resolvedSelection.rowId, (row) => ({
-      ...row,
-      cells: row.cells.map((cell) =>
-        cell.id === selectedCellId ? updater(cell) : cell,
-      ),
-    }))
+    updateRow(
+      resolvedSelection.stripId,
+      resolvedSelection.rowId,
+      (row) => ({
+        ...row,
+        cells: row.cells.map((cell) =>
+          cell.id === selectedCellId ? updater(cell) : cell,
+        ),
+      }),
+      `cell-style:${selectedCellId}`,
+    )
   }
 
   function clearSelection() {
@@ -299,10 +434,13 @@ export function App() {
   }
 
   function handleNewProject() {
-    if (!window.confirm('Start a new project? Unsaved editor changes will be lost.'))
+    if (
+      hasUnsavedChanges &&
+      !window.confirm('Start a new project? Unsaved changes will be lost.')
+    )
       return
     const nextProject = createProject()
-    setProject(nextProject)
+    setHistory(createProjectHistory(nextProject))
     setActiveStripId(nextProject.strips[0]?.id)
     setActiveRowId(nextProject.strips[0]?.rows[0]?.id)
     setSelectedJoinStripIds([])
@@ -317,24 +455,25 @@ export function App() {
       fileName,
       PROJECT_FILE_MIME_TYPE,
     )
+    setHistory(markProjectSaved)
     setNotice({ kind: 'success', message: `Saved ${fileName}` })
   }
 
   const loadProjectFileIntoEditor = useCallback(
-    async (file: File, confirmReplacement: boolean) => {
+    async (file: File) => {
       try {
         const imported = await readProjectFileWithCompatibility(file)
         const importedProject = imported.project
         if (
-          confirmReplacement &&
+          hasUnsavedChangesRef.current &&
           !window.confirm(
-            `Open “${importedProject.name || 'Untitled project'}”? Unsaved editor changes will be lost.`,
+            `Open “${importedProject.name || 'Untitled project'}”? Unsaved changes in the current project will be lost.`,
           )
         ) {
           return
         }
 
-        setProject(importedProject)
+        setHistory(createProjectHistory(importedProject))
         if (printPreferencesSource.current === 'default') {
           printPreferencesSource.current = 'legacy-project'
           setPrintPreferences(
@@ -365,7 +504,7 @@ export function App() {
 
   useEffect(() => {
     registerProjectFileLaunchHandler(window, {
-      onFile: (file) => loadProjectFileIntoEditor(file, false),
+      onFile: (file) => loadProjectFileIntoEditor(file),
       onError: (error) =>
         setNotice({
           kind: 'error',
@@ -807,8 +946,18 @@ export function App() {
   ) {
     if (!activeStrip || !activeRow || !selectedGroupHeader) return
     try {
-      updateRow(activeStrip.id, activeRow.id, (row) =>
-        updateGroupHeader(row, selectedGroupHeader.id, updater),
+      // Validate here: an error thrown inside a state updater would surface
+      // during rendering, where this catch block cannot see it.
+      const updatedRow = updateGroupHeader(
+        activeRow,
+        selectedGroupHeader.id,
+        updater,
+      )
+      updateRow(
+        activeStrip.id,
+        activeRow.id,
+        () => updatedRow,
+        `group-header:${selectedGroupHeader.id}`,
       )
     } catch (error) {
       setNotice({
@@ -835,8 +984,11 @@ export function App() {
 
   function handleApplyCellAppearance(appearance: Partial<CellAppearance>) {
     if (!activeStrip || !activeRow || !resolvedSelection) return
-    updateRow(activeStrip.id, activeRow.id, (row) =>
-      applyCellAppearanceToRange(row, resolvedSelection, appearance),
+    updateRow(
+      activeStrip.id,
+      activeRow.id,
+      (row) => applyCellAppearanceToRange(row, resolvedSelection, appearance),
+      `cell-appearance:${activeRow.id}`,
     )
   }
 
@@ -920,11 +1072,16 @@ export function App() {
       <Toolbar
         projectName={project.name}
         onProjectNameChange={(name) =>
-          updateProject((current) => ({ ...current, name }))
+          updateProject((current) => ({ ...current, name }), 'project-name')
         }
         onNewProject={handleNewProject}
-        onOpenProject={(file) => loadProjectFileIntoEditor(file, true)}
+        onOpenProject={(file) => loadProjectFileIntoEditor(file)}
         onSaveProject={handleSaveProject}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndoProjectChange(history)}
+        canRedo={canRedoProjectChange(history)}
+        hasUnsavedChanges={hasUnsavedChanges}
         onPrintPdf={() => setShowPrintReminder(true)}
         onExportPdf={handleExportPdf}
         onExportCalibration={() => setShowCalibrationReminder(true)}
@@ -942,19 +1099,11 @@ export function App() {
         </div>
       )}
       {showPrintReminder && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) setShowPrintReminder(false)
-          }}
+        <Modal
+          className="print-reminder"
+          labelledBy="print-reminder-title"
+          onClose={() => setShowPrintReminder(false)}
         >
-          <section
-            className="print-reminder"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="print-reminder-title"
-          >
             <span className="eyebrow">Before printing</span>
             <h2 id="print-reminder-title">{PRINT_SCALING_TITLE}</h2>
             <p>{PRINT_SCALING_BODY}</p>
@@ -976,24 +1125,14 @@ export function App() {
                 Open PDF for Printing
               </button>
             </div>
-          </section>
-        </div>
+          </Modal>
       )}
       {showCalibrationReminder && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget)
-              setShowCalibrationReminder(false)
-          }}
+        <Modal
+          className="print-reminder"
+          labelledBy="calibration-reminder-title"
+          onClose={() => setShowCalibrationReminder(false)}
         >
-          <section
-            className="print-reminder"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="calibration-reminder-title"
-          >
             <span className="eyebrow">Before using calibration</span>
             <h2 id="calibration-reminder-title">{PRINT_SCALING_TITLE}</h2>
             <p>{PRINT_SCALING_BODY}</p>
@@ -1015,17 +1154,15 @@ export function App() {
                 Download Calibration PDF
               </button>
             </div>
-          </section>
-        </div>
+          </Modal>
       )}
       {pendingDeleteStrip && (
-        <div className="modal-backdrop" role="presentation">
-          <section
-            className="print-reminder delete-strip-confirmation"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-strip-title"
-          >
+        <Modal
+          className="print-reminder delete-strip-confirmation"
+          labelledBy="delete-strip-title"
+          onClose={() => setPendingDeleteStripId(undefined)}
+          closeOnBackdrop={false}
+        >
             <span className="eyebrow">Delete strip</span>
             <h2 id="delete-strip-title">
               Delete “{pendingDeleteStrip.name || 'Unnamed strip'}” and all of
@@ -1050,8 +1187,7 @@ export function App() {
                 Delete Strip
               </button>
             </div>
-          </section>
-        </div>
+          </Modal>
       )}
       <div className="app-body">
         <Sidebar
@@ -1064,7 +1200,12 @@ export function App() {
           selectedGroupHeader={selectedGroupHeader}
           onUpdateRow={(updater) => {
             if (activeStripId && activeRowId) {
-              updateRow(activeStripId, activeRowId, updater)
+              updateRow(
+                activeStripId,
+                activeRowId,
+                updater,
+                `auto-numbering:${activeRowId}`,
+              )
             }
           }}
           onUpdateCell={updateSelectedCell}
@@ -1119,18 +1260,27 @@ export function App() {
           onUpdateRow={updateRowFromStripSetup}
           onSetRowCount={handleSetRowCount}
           onRenameStrip={(stripId, name) =>
-            updateStrip(stripId, (strip) => ({ ...strip, name }))
+            updateStrip(
+              stripId,
+              (strip) => ({ ...strip, name }),
+              `strip-name:${stripId}`,
+            )
           }
           onSelectCell={handleSelectCell}
           onSelectGroupHeader={handleSelectGroupHeader}
           onClearSelection={clearSelection}
           onChangeCellText={(stripId, rowId, cellId, line1, line2) =>
-            updateRow(stripId, rowId, (row) => ({
-              ...row,
-              cells: row.cells.map((cell) =>
-                cell.id === cellId ? { ...cell, line1, line2 } : cell,
-              ),
-            }))
+            updateRow(
+              stripId,
+              rowId,
+              (row) => ({
+                ...row,
+                cells: row.cells.map((cell) =>
+                  cell.id === cellId ? { ...cell, line1, line2 } : cell,
+                ),
+              }),
+              `cell-text:${cellId}`,
+            )
           }
           onMoveCell={handleMoveCell}
           onAddStrip={handleAddStrip}

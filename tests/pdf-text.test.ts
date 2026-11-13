@@ -13,6 +13,15 @@ describe('PDF text encoding', () => {
     expect(toPdfText('ÆØÅ æøå – “Mic” € µ ×')).toBe('ÆØÅ æøå – “Mic” € µ ×')
   })
 
+  it('composes decomposed accents and drops invisible characters', () => {
+    expect(toPdfText('Ska\u030ane fo\u0308r e\u0301')).toBe('Skåne för é')
+    expect(toPdfText('a\u200bb\ufeffc\u2060d')).toBe('abcd')
+
+    const project = createProject()
+    project.strips[0].rows[0].cells[0].line1 = 'Ska\u030ane\u200b'
+    expect(findPdfUnsupportedCharacters(project)).toEqual([])
+  })
+
   it('replaces characters the standard PDF fonts cannot encode', () => {
     expect(toPdfText('SDI → Router ≥ 75 Ω ✓ 🎤')).toBe(
       'SDI -> Router >= 75 Ohm v ?',

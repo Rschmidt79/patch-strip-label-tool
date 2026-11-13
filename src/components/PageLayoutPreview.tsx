@@ -166,6 +166,7 @@ export function PageLayoutPreview({
                 <input
                   type="number"
                   aria-label="Custom strip gap in millimeters"
+                  data-native-undo
                   value={preferences.customGapMm}
                   min={MIN_CUSTOM_STRIP_GAP_MM}
                   max={MAX_CUSTOM_STRIP_GAP_MM}
@@ -192,12 +193,22 @@ export function PageLayoutPreview({
             <label className="print-setting-toggle">
               <input
                 type="checkbox"
+                checked={preferences.cutLines}
+                onChange={(event) =>
+                  updatePreferences({ cutLines: event.target.checked })
+                }
+              />
+              <span>Cut lines</span>
+            </label>
+            <label className="print-setting-toggle">
+              <input
+                type="checkbox"
                 checked={preferences.cropMarks}
                 onChange={(event) =>
                   updatePreferences({ cropMarks: event.target.checked })
                 }
               />
-              <span>Cut lines</span>
+              <span>Crop marks</span>
             </label>
           </fieldset>
         </div>

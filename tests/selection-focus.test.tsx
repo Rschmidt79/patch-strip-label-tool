@@ -29,7 +29,7 @@ describe('cell range discoverability and focus indication', () => {
       />,
     )
 
-    expect(markup).toContain('aria-selected="true"')
+    expect(markup).toContain('aria-pressed="true"')
     expect(markup).toContain('tabindex="0"')
     expect(markup).toContain('class="cell-selection"')
     expect(markup).not.toContain('svg-cell-input')

@@ -48,16 +48,28 @@ function toPdfCharacter(character: string): string {
   return PDF_TEXT_REPLACEMENTS[character] ?? PDF_UNSUPPORTED_CHARACTER_FALLBACK
 }
 
+// Invisible formatting characters that pasted text often carries.
+const INVISIBLE_CHARACTERS = /[\u200b-\u200d\u2060\ufeff]/g
+
+/**
+ * Composes decomposed accents (for example "a" + combining ring into "å") and
+ * drops invisible characters, so text pasted from file names or other
+ * documents prints the way it looks on screen.
+ */
+export function normalizePdfSourceText(text: string): string {
+  return text.normalize('NFC').replace(INVISIBLE_CHARACTERS, '')
+}
+
 /** Converts user text into characters the PDF standard fonts can encode. */
 export function toPdfText(text: string): string {
-  return Array.from(text, toPdfCharacter).join('')
+  return Array.from(normalizePdfSourceText(text), toPdfCharacter).join('')
 }
 
 /** Lists each distinct printed character that the PDF must substitute. */
 export function findPdfUnsupportedCharacters(project: LabelProject): string[] {
   const unsupported = new Set<string>()
   const collect = (text: string) => {
-    for (const character of text) {
+    for (const character of normalizePdfSourceText(text)) {
       if (!isPdfEncodableCharacter(character) && !/\s/.test(character)) {
         unsupported.add(character)
       }

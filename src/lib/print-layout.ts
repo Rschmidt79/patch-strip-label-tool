@@ -1,4 +1,12 @@
-import type { LabelProject } from '../model/project'
+import type {
+  LabelProject,
+  PageSettings,
+  StripDimensions,
+} from '../model/project'
+import {
+  DEFAULT_CELL_APPEARANCE,
+  DEFAULT_TEXT_STYLE,
+} from '../model/defaults'
 import {
   getPageDimensionsMm,
   getPageLayoutMarginsMm,
@@ -140,4 +148,78 @@ export function planPrintLayout(
     printSegments,
     supportArea,
   }
+}
+
+/** The only project data that influences placement and cut guides. */
+interface PrintLayoutGeometry {
+  page: PageSettings
+  strips: Array<{
+    id: string
+    name: string
+    rows: Array<{ id: string; dimensions: StripDimensions }>
+  }>
+}
+
+/**
+ * A stable key for everything in a project that the print layout depends on.
+ * Cell text, colors, and text styles are deliberately absent, so typing does
+ * not invalidate a layout that cannot have changed.
+ */
+export function getPrintLayoutGeometryKey(project: LabelProject): string {
+  const geometry: PrintLayoutGeometry = {
+    page: { size: project.page.size, orientation: project.page.orientation },
+    strips: project.strips.map((strip) => ({
+      id: strip.id,
+      name: strip.name,
+      rows: strip.rows.map((row) => ({
+        id: row.id,
+        dimensions: {
+          widthMm: row.dimensions.widthMm,
+          heightMm: row.dimensions.heightMm,
+          groupHeaderBandHeightMm: row.dimensions.groupHeaderBandHeightMm,
+          cellCount: row.dimensions.cellCount,
+          cellWidthMode: row.dimensions.cellWidthMode,
+          customCellWidthMm: row.dimensions.customCellWidthMm,
+        },
+      })),
+    })),
+  }
+  return JSON.stringify(geometry)
+}
+
+/** Plans the same layout as `planPrintLayout` from a geometry key alone. */
+export function planPrintLayoutFromGeometryKey(
+  geometryKey: string,
+  preferences: PrintPreferences,
+): PrintLayoutPlan {
+  const geometry: PrintLayoutGeometry = JSON.parse(geometryKey)
+  const layoutProject: LabelProject = {
+    schemaVersion: 5,
+    id: 'print-layout-geometry',
+    name: '',
+    createdAt: '',
+    updatedAt: '',
+    page: geometry.page,
+    strips: geometry.strips.map((strip) => ({
+      id: strip.id,
+      name: strip.name,
+      rows: strip.rows.map((row) => ({
+        id: row.id,
+        name: '',
+        dimensions: row.dimensions,
+        defaultTextStyle: { ...DEFAULT_TEXT_STYLE },
+        defaultCellAppearance: { ...DEFAULT_CELL_APPEARANCE },
+        cells: [],
+        groupHeaders: [],
+        autoNumbering: {
+          line1Template: '',
+          line2Template: '',
+          startNumber: 1,
+          digits: 1,
+          cellCount: row.dimensions.cellCount,
+        },
+      })),
+    })),
+  }
+  return planPrintLayout(layoutProject, preferences)
 }

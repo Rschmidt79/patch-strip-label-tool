@@ -9,6 +9,11 @@ interface ToolbarProps {
   onNewProject: () => void
   onOpenProject: (file: File) => void | Promise<void>
   onSaveProject: () => void
+  onUndo: () => void
+  onRedo: () => void
+  canUndo: boolean
+  canRedo: boolean
+  hasUnsavedChanges: boolean
   onPrintPdf: () => void | Promise<void>
   onExportPdf: () => void | Promise<void>
   onExportCalibration: () => void | Promise<void>
@@ -21,6 +26,11 @@ export function Toolbar({
   onNewProject,
   onOpenProject,
   onSaveProject,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  hasUnsavedChanges,
   onPrintPdf,
   onExportPdf,
   onExportCalibration,
@@ -53,6 +63,23 @@ export function Toolbar({
       </label>
 
       <nav className="toolbar-actions" aria-label="Project actions">
+        <button
+          className="button button-quiet"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/Cmd+Z)"
+        >
+          Undo
+        </button>
+        <button
+          className="button button-quiet"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl/Cmd+Shift+Z)"
+        >
+          Redo
+        </button>
+        <div className="toolbar-divider" />
         <button className="button button-quiet" onClick={onNewProject}>
           New
         </button>
@@ -77,8 +104,19 @@ export function Toolbar({
         <button
           className="button button-quiet"
           onClick={onSaveProject}
+          title={
+            hasUnsavedChanges
+              ? 'Save project — there are unsaved changes'
+              : 'Save project'
+          }
         >
           Save
+          {hasUnsavedChanges && (
+            <span className="unsaved-indicator" aria-label="unsaved changes">
+              {' '}
+              •
+            </span>
+          )}
         </button>
         <div className="toolbar-divider" />
         <button
