@@ -1,4 +1,8 @@
-import type { LabelStrip, LabelStripRow } from '../model/project'
+import type {
+  CellTextStyle,
+  LabelStrip,
+  LabelStripRow,
+} from '../model/project'
 
 export const CSS_PX_PER_MM = 96 / 25.4
 export const POINTS_PER_MM = 72 / 25.4
@@ -78,11 +82,47 @@ export function fitFontSizePt(
   if (!context) return requestedSizePt
 
   const requestedSizePx = requestedSizePt * (96 / 72)
-  context.font = `${weight === 'bold' ? 700 : 400} ${requestedSizePx}px Inter, "Segoe UI", sans-serif`
+  context.font = `${weight === 'bold' ? 700 : 400} ${requestedSizePx}px ${PREVIEW_FONT_FAMILY}`
 
   const measuredWidthPx = context.measureText(text).width
   const maximumWidthPx = maximumWidthMm * CSS_PX_PER_MM
   if (measuredWidthPx <= maximumWidthPx) return requestedSizePt
 
   return Math.max(3.5, requestedSizePt * (maximumWidthPx / measuredWidthPx))
+}
+
+/** Line pitch of two-line cell text relative to its font size. */
+export const PREVIEW_LINE_HEIGHT_RATIO = 1.04
+export const PREVIEW_FONT_FAMILY = 'Inter, "Segoe UI", sans-serif'
+
+/**
+ * Font size of each non-empty line as the editor preview draws it. The cell
+ * text and the in-place edit field both use this, so text does not move or
+ * change size when a cell is opened for editing.
+ */
+export function getPreviewLineFontSizesPt(
+  lines: readonly string[],
+  cellWidthMm: number,
+  cellHeightMm: number,
+  style: CellTextStyle,
+): number[] {
+  if (lines.length === 0) return []
+  const horizontalPaddingMm = Math.min(1.25, cellWidthMm * 0.08)
+  const availableWidthMm = Math.max(0.5, cellWidthMm - horizontalPaddingMm * 2)
+  const maximumLineSizePt =
+    cellHeightMm /
+    (lines.length === 1 ? 1.15 : lines.length * 1.12) /
+    MM_PER_POINT
+  const requestedSizePt = style.autoFit
+    ? Math.min(style.fontSizePt, maximumLineSizePt)
+    : style.fontSizePt
+  return lines.map((line) =>
+    fitFontSizePt(
+      line,
+      availableWidthMm,
+      requestedSizePt,
+      style.fontWeight,
+      style.autoFit,
+    ),
+  )
 }

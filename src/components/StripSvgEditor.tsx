@@ -4,8 +4,11 @@ import {
   getCellWidthMm,
   getStripRowTopOffsetsMm,
   getStripTotalHeightMm,
+  getPreviewLineFontSizesPt,
   getStripWidthMm,
   MM_PER_POINT,
+  PREVIEW_FONT_FAMILY,
+  PREVIEW_LINE_HEIGHT_RATIO,
 } from '../lib/dimensions'
 import {
   getCellContentGeometryMm,
@@ -44,9 +47,18 @@ interface StripSvgEditorProps {
   onMoveCell: (rowId: string, cellId: string, direction: -1 | 1) => void
 }
 
+/**
+ * The edit field is laid out at this multiple of its real size and scaled
+ * back down by the SVG. Browsers position text imprecisely at font sizes of
+ * two or three units, which made the text shift when a cell was opened.
+ */
+const EDITOR_LAYOUT_SCALE = 10
+
 interface CellTextareaEditorProps {
   cell: LabelCell
   index: number
+  cellWidthMm: number
+  cellHeightMm: number
   onChangeCellText: (cellId: string, line1: string, line2: string) => void
   onMoveCell: (cellId: string, direction: -1 | 1) => void
   onClearSelection: () => void
@@ -55,21 +67,54 @@ interface CellTextareaEditorProps {
 function CellTextareaEditor({
   cell,
   index,
+  cellWidthMm,
+  cellHeightMm,
   onChangeCellText,
   onMoveCell,
   onClearSelection,
 }: CellTextareaEditorProps) {
   const [draft, setDraft] = useState(() => formatCellEditValue(cell))
+  const value = resolveCellEditValue(cell, draft)
+
+  // Match the size and position of the text as it is drawn when not editing.
+  const fittedSizesPt = getPreviewLineFontSizesPt(
+    [cell.line1, cell.line2].filter(Boolean),
+    cellWidthMm,
+    cellHeightMm,
+    cell.style,
+  )
+  const fontSizeMm =
+    (fittedSizesPt.length > 0
+      ? Math.min(...fittedSizesPt)
+      : cell.style.autoFit
+        ? Math.min(
+            cell.style.fontSizePt,
+            cellHeightMm / 1.15 / MM_PER_POINT,
+          )
+        : cell.style.fontSizePt) * MM_PER_POINT
+  const lineCount = value.includes('\n') ? 2 : 1
+  const lineHeightMm = fontSizeMm * PREVIEW_LINE_HEIGHT_RATIO
+  const paddingTopMm = Math.max(
+    0,
+    (cellHeightMm - lineCount * lineHeightMm) / 2 -
+      (lineCount > 1 ? lineHeightMm * 0.02 : 0),
+  )
+  const paddingInlineMm = Math.min(1.25, cellWidthMm * 0.08)
+
   return (
     <textarea
       className="svg-cell-input"
       autoFocus
-      value={resolveCellEditValue(cell, draft)}
+      value={value}
       maxLength={MAX_CELL_TEXT_LENGTH * 2 + 1}
       aria-label={`Edit cell ${index + 1}, two lines maximum`}
       style={{
         textAlign: cell.style.alignment,
-        fontSize: `${cell.style.fontSizePt * MM_PER_POINT}px`,
+        fontFamily: PREVIEW_FONT_FAMILY,
+        fontSize: `${fontSizeMm * EDITOR_LAYOUT_SCALE}px`,
+        lineHeight: PREVIEW_LINE_HEIGHT_RATIO,
+        paddingTop: `${paddingTopMm * EDITOR_LAYOUT_SCALE}px`,
+        paddingInline: `${paddingInlineMm * EDITOR_LAYOUT_SCALE}px`,
         fontWeight: cell.style.fontWeight === 'bold' ? 700 : 400,
         color: cell.appearance.textColor,
       }}
@@ -313,14 +358,19 @@ export function StripSvgEditor({
                     {isEditing && (
                       <foreignObject
                         key={cell.id}
-                        x={cellX + 0.45}
-                        y={contentTopMm + 0.4}
-                        width={Math.max(0.5, cellWidthMm - 0.9)}
-                        height={Math.max(0.5, contentGeometry.heightMm - 0.8)}
+                        transform={`translate(${cellX} ${contentTopMm}) scale(${1 / EDITOR_LAYOUT_SCALE})`}
+                        x={0}
+                        y={0}
+                        width={cellWidthMm * EDITOR_LAYOUT_SCALE}
+                        height={
+                          contentGeometry.heightMm * EDITOR_LAYOUT_SCALE
+                        }
                       >
                         <CellTextareaEditor
                           cell={cell}
                           index={index}
+                          cellWidthMm={cellWidthMm}
+                          cellHeightMm={contentGeometry.heightMm}
                           onChangeCellText={(cellId, line1, line2) =>
                             onChangeCellText(row.id, cellId, line1, line2)
                           }
