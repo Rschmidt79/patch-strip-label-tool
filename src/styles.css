@@ -334,6 +334,12 @@ input:disabled {
   background: rgba(52, 29, 29, 0.98);
 }
 
+.app-notice-support {
+  color: #f3d58a;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .app-notice button {
   width: 24px;
   height: 24px;

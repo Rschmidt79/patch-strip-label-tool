@@ -25,6 +25,7 @@ export default defineConfig({
       workbox: {
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{html,js,css,svg,png,ico,txt,xml}'],
+        globIgnores: ['og-image.png'],
         navigateFallback: 'index.html',
         runtimeCaching: [],
       },

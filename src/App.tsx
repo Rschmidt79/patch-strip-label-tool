@@ -7,6 +7,7 @@ import { Sidebar } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
 import { Workspace } from './components/Workspace'
 import { createProject, createStrip } from './model/defaults'
+import { createExampleProject } from './lib/example-project'
 import {
   addStripRow,
   duplicateStrip,
@@ -87,6 +88,7 @@ import {
   createFeedbackMailto,
   PRINT_SCALING_BODY,
   PRINT_SCALING_TITLE,
+  SUPPORT_URL,
 } from './config/app-info'
 import {
   MAX_PROJECT_ROWS,
@@ -103,6 +105,7 @@ import {
 interface AppNotice {
   kind: 'success' | 'error'
   message: string
+  showSupportLink?: boolean
 }
 
 interface PageLayoutResult {
@@ -448,6 +451,27 @@ export function App() {
     setNotice({ kind: 'success', message: 'New project created.' })
   }
 
+  function handleLoadExample() {
+    if (
+      hasUnsavedChanges &&
+      !window.confirm(
+        'Load the example project? Unsaved changes will be lost.',
+      )
+    )
+      return
+    const nextProject = createExampleProject()
+    setHistory(createProjectHistory(nextProject))
+    setActiveStripId(nextProject.strips[0]?.id)
+    setActiveRowId(nextProject.strips[0]?.rows[0]?.id)
+    setSelectedJoinStripIds([])
+    clearSelection()
+    setNotice({
+      kind: 'success',
+      message:
+        'Example loaded. Open Page layout preview to see how the strips are arranged on the sheet at true size.',
+    })
+  }
+
   function handleSaveProject() {
     const fileName = createProjectFileName(project.name)
     downloadText(
@@ -544,6 +568,7 @@ export function App() {
       setNotice({
         kind: 'success',
         message: `Created ${fileName} without scaling.${describePdfCharacterSubstitutions(project)}`,
+        showSupportLink: true,
       })
     } catch (error) {
       setNotice({
@@ -582,6 +607,7 @@ export function App() {
         kind: 'success',
         message:
           `PDF opened for printing. PRINT AT 100% / ACTUAL SIZE — DO NOT FIT OR SHRINK TO PAGE.${describePdfCharacterSubstitutions(project)}`,
+        showSupportLink: true,
       })
     } catch (error) {
       printWindow.close()
@@ -1075,6 +1101,7 @@ export function App() {
           updateProject((current) => ({ ...current, name }), 'project-name')
         }
         onNewProject={handleNewProject}
+        onLoadExample={handleLoadExample}
         onOpenProject={(file) => loadProjectFileIntoEditor(file)}
         onSaveProject={handleSaveProject}
         onUndo={handleUndo}
@@ -1092,7 +1119,22 @@ export function App() {
           className={`app-notice ${notice.kind}`}
           role={notice.kind === 'error' ? 'alert' : 'status'}
         >
-          <span>{notice.message}</span>
+          <span>
+            {notice.message}
+            {notice.showSupportLink && (
+              <>
+                {' '}
+                <a
+                  className="app-notice-support"
+                  href={SUPPORT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Saved you time? ☕ Buy me a coffee
+                </a>
+              </>
+            )}
+          </span>
           <button onClick={() => setNotice(undefined)} aria-label="Dismiss message">
             ×
           </button>

@@ -1,8 +1,34 @@
 # Rack Label Maker
 
-A completely client-side React application for designing and exporting true-size labels for broadcast racks, patch panels, and equipment. Projects and PDFs remain in the browser; there is no backend, account, database, analytics, cloud storage, or required server runtime.
+**Free, browser-based label maker for 19" racks, patch panels, and broadcast/AV/pro-audio equipment.**
 
-![Rack Label Maker with range-aware numbering](docs/range-selection-preview.png)
+👉 **Use it now: [labels.rschmidt.dk](https://labels.rschmidt.dk/)** (no account, no install, nothing uploaded)
+
+![Rack Label Maker editor with video router and audio stagebox strips](docs/editor-v1.png)
+
+Type straight into the label cells, press Tab to move on, and export a vector PDF that prints at true physical size. Everything runs in your browser; there is no backend, account, database, or cloud storage. The only thing measured is anonymous page views through cookie-free [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy); label content never leaves your browser.
+
+## Features
+
+- **True-size strips in millimeters**, with presets such as a full-rack 432 mm × 16-cell strip and custom widths, heights, and cell counts
+- **One to three rows per strip** and group headers over a range of cells
+- **Auto numbering** with a `{n}` template (for example `CAM {n}` or `CH {n}`) applied only to the selected range
+- **Automatic sheet layout.** Full-width 432 mm rack strips are placed diagonally when needed, so several fit whole on one A3 sheet without gluing. Strips are never scaled
+- **Vector PDF export and Print** for A4, A3, SRA3, US Letter, US Legal, and US Tabloid, with shared cut lines between touching strips
+- **Split printing with glue tabs** when a strip is longer than the paper
+- **Calibration PDF** with an exact 100 × 100 mm square to check your printer
+- **Project files** (`.racklabel`) you can save, share, and reopen
+- **Installable and offline-capable** as a PWA
+
+Click **Example** in the toolbar to load a filled-in OB truck rack and see it in Page layout preview:
+
+![Six rack strips arranged on one A3 landscape sheet, five of them rotated to fit](docs/a3-layout.png)
+
+## Support the project
+
+Rack Label Maker is free and will stay free. If it saved you an afternoon of fiddling with spreadsheets and label printers, you can [☕ buy me a coffee](https://buymeacoffee.com/rschmidt). Starring the repository and sharing the tool with colleagues also helps.
+
+Found a bug or have an idea? Use **Send feedback** in the app footer or open an issue.
 
 ## Development
 
@@ -141,4 +167,4 @@ PDFs automatically include the bundled Buy Me a Coffee QR in a collision-safe
 bottom-right decoration area. It never changes strip placement and never
 appears in calibration PDFs.
 
-CSV, accounts, printer correction factors, analytics, cloud save, nested headers, and arbitrary uploaded fonts are intentionally not implemented.
+CSV, accounts, printer correction factors, cloud save, nested headers, and arbitrary uploaded fonts are intentionally not implemented.
