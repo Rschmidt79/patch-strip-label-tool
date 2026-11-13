@@ -35,6 +35,8 @@ describe('application information', () => {
     expect(markup).toContain('Physical glue tabs and assembly guidance')
     expect(markup).toContain('Stable 1.0 release')
     expect(markup).toContain('Press Enter in a cell to start line 2')
+    expect(markup).toContain('Undo and redo')
+    expect(markup).toContain('v1.0.2')
     expect(markup).toContain('v1.0.1')
     expect(markup).toContain('v1.0.0')
     expect(markup).toContain('v0.9.0-beta')
